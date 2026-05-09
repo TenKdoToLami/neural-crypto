@@ -12,6 +12,7 @@ class DataFetcher:
         self.exchange = getattr(ccxt, exchange_id)({'enableRateLimit': True})
         self.data_dir = 'data/raw'
         self.stables_file = 'data/stables_ignore.txt'
+        self.whitelist_file = 'data/etoro_assets.txt'
         os.makedirs(self.data_dir, exist_ok=True)
         
         # Load ignored stables (Rule [3])
@@ -21,25 +22,45 @@ class DataFetcher:
                 self.ignored_stables = set(line.strip() for line in f if line.strip())
 
     def get_top_assets(self, limit=100):
-        """Fetch top assets by volume, excluding known stables."""
-        print(f"Fetching top {limit} volatile assets by volume...")
+        """Fetch top assets by volume, PLUS whitelist, excluding known stables."""
+        print(f"Fetching market data...")
         tickers = self.exchange.fetch_tickers()
         
-        # Base list of known major stables to skip immediately
-        stables = {'USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'FDUSD', 'USDE', 'PYUSD'}
-        stables.update(self.ignored_stables)
-        
+        # 1. Load Whitelist from eToro list
+        whitelist = set()
+        if os.path.exists(self.whitelist_file):
+            try:
+                df_white = pd.read_csv(self.whitelist_file)
+                for s in df_white['Symbol'].unique():
+                    symbol = f"{s}/USDT"
+                    # Only add if it actually exists on Binance
+                    if symbol in tickers:
+                        whitelist.add(symbol)
+                    else:
+                        # Silently skip CRO, etc.
+                        pass
+                print(f"Loaded {len(whitelist)} priority assets from whitelist.")
+            except Exception as e:
+                print(f"Warning: Could not load whitelist: {e}")
+
+        # Only fetch /USDT pairs that are NOT in our blacklist
         usdt_pairs = []
         for symbol, t in tickers.items():
-            if '/' not in symbol:
-                continue
-            base, quote = symbol.split('/')
-            
-            if quote == 'USDT' and base not in stables and symbol not in stables:
+            if symbol.endswith('/USDT') and symbol not in self.ignored_stables:
                 usdt_pairs.append(t)
-
+        
+        # Sort by volume
         sorted_pairs = sorted(usdt_pairs, key=lambda x: x['quoteVolume'], reverse=True)
-        return [p['symbol'] for p in sorted_pairs[:limit]]
+        top_symbols = [p['symbol'] for p in sorted_pairs[:limit]]
+        
+        # Combine Whitelist + Top Volume (Unique set)
+        final_list = list(set(top_symbols) | whitelist)
+        
+        # Final safety filter against blacklist (in case whitelist contained a stable)
+        final_list = [s for s in final_list if s not in self.ignored_stables]
+        
+        print(f"Total targets: {len(final_list)} (Top {limit} + Whitelist)")
+        return final_list
 
     def fetch_ohlcv(self, symbol, timeframe='15m', days=365):
         """Fetch historical OHLCV for a symbol with a stability check."""
@@ -84,8 +105,15 @@ class DataFetcher:
                     # Set 'since' to the timestamp of the last candle
                     last_ts_str = existing_data['timestamp'].iloc[-1]
                     last_ts_dt = datetime.strptime(last_ts_str, '%Y-%m-%d %H:%M:%S')
+                    
+                    # Check age: If less than 2 days old, skip to save time (Rule [3])
+                    age = datetime.now() - last_ts_dt
+                    if age < timedelta(days=2):
+                        print(f"  [=] {symbol}: Data is fresh ({age.days}d {age.seconds//3600}h old). Skipping.")
+                        return
+
                     since = self.exchange.parse8601(last_ts_dt.isoformat())
-                    print(f"  [+] {symbol}: Found existing data. Resuming from {last_ts_str}")
+                    print(f"  [+] {symbol}: Resuming from {last_ts_str}")
             except Exception as e:
                 print(f"  [!] Error reading existing file {filename}: {e}. Redownloading...")
 
