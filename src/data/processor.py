@@ -60,18 +60,25 @@ class DataProcessor:
         df['target'] = (future_max > df['close'] * (1 + threshold)).astype(int)
         return df
 
-    def prepare_sequences(self, df):
-        """Convert dataframe into X (sequences) and y (labels)."""
-        # New features are all relative/normalized
+    def prepare_features(self, df):
+        """
+        Convert dataframe into a normalized 2D feature matrix.
+        Returns (features_np, labels_np)
+        """
         features = ['open_ret', 'high_ret', 'low_ret', 'close_ret', 'volume_log', 'rsi', 'ema_diff', 'volatility']
         
         data = df[features].values
         labels = df['target'].values
 
         # Final Standardization (Z-score normalization)
-        # This ensures all features have Mean=0 and Std=1
         data = self.scaler.fit_transform(data)
+        
+        return data.astype(np.float32), labels.astype(np.int32)
 
+    def prepare_sequences(self, df):
+        """Convert dataframe into X (sequences) and y (labels) using sliding window."""
+        data, labels = self.prepare_features(df)
+        
         X, y = [], []
         # We stop early to avoid out-of-bounds due to lookback and horizon
         for i in range(len(data) - self.lookback - self.horizon):
