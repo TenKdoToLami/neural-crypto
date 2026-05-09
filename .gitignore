@@ -1,7 +1,8 @@
 # Data and Models
-data/
-models/
-outputs/
+/data/
+/models/
+/outputs/
+/data/processed/
 
 # Python
 __pycache__/
