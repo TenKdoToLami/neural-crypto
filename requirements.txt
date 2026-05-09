@@ -1,0 +1,10 @@
+ccxt
+pandas
+numpy
+torch
+torchvision
+torchaudio
+pandas-ta-classic
+scikit-learn
+matplotlib
+tqdm
