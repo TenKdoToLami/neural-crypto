@@ -120,10 +120,10 @@ class DataFetcher:
                     # but usually, we just resume from the end.
                     since = max(since, self.exchange.parse8601(last_ts_dt.isoformat()))
                     
-                    # Check age: If less than 2 hours old, skip (Rule [3])
+                    # Check age: If less than 3 days old, skip (Rule [3])
                     age = datetime.now() - last_ts_dt
-                    if age < timedelta(hours=2) and not since_date:
-                        print(f"  [=] {symbol}: Data is fresh ({age.seconds//60}m old). Skipping.")
+                    if age < timedelta(days=3) and not since_date:
+                        print(f"  [=] {symbol}: Data is fresh ({age.days}d {age.seconds//3600}h old). Skipping.")
                         return
             except Exception as e:
                 print(f"  [!] Error reading existing file {filename}: {e}. Redownloading...")
