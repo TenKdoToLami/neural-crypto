@@ -67,11 +67,16 @@ class DataProcessor:
         """
         features = ['open_ret', 'high_ret', 'low_ret', 'close_ret', 'volume_log', 'rsi', 'ema_diff', 'volatility']
         
-        data = df[features].values
+        # Anti-Cheating: Rolling Standardization to prevent future data leakage
+        rolling_mean = df[features].rolling(window=1000, min_periods=1).mean()
+        rolling_std = df[features].rolling(window=1000, min_periods=1).std()
+        
+        # Avoid division by zero
+        rolling_std = rolling_std.replace(0, 1e-9)
+        
+        data_df = (df[features] - rolling_mean) / rolling_std
+        data = data_df.values
         labels = df['target'].values
-
-        # Final Standardization (Z-score normalization)
-        data = self.scaler.fit_transform(data)
         
         return data.astype(np.float32), labels.astype(np.int32)
 
