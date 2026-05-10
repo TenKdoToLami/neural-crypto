@@ -116,12 +116,18 @@ class BinanceTrader:
         # If this is the midnight run (00:00 - 00:15 UTC), save the total value to a performance tracker
         now_utc = datetime.utcnow()
         if now_utc.hour == 0 and now_utc.minute < 15:
+            import json
             perf_file = "data/daily_value.csv"
             exists = os.path.exists(perf_file)
+            
+            # Create a simplified holdings map for the log
+            holdings_log = {sym: f"{info['amount']:.6f}" for sym, info in holdings.items()}
+            holdings_json = json.dumps(holdings_log).replace('"', '""') # Escape quotes for CSV
+            
             with open(perf_file, "a") as f:
                 if not exists:
-                    f.write("timestamp,total_value_usdc\n")
-                f.write(f"{now_utc.strftime('%Y-%m-%d %H:%M:%S')},{total_value:.2f}\n")
+                    f.write("timestamp,total_value_usdc,holdings_json\n")
+                f.write(f"{now_utc.strftime('%Y-%m-%d %H:%M:%S')},{total_value:.2f},\"{holdings_json}\"\n")
             print(f"[Daily Report] Saved daily portfolio snapshot: ${total_value:.2f} {self.quote_currency}")
         # ------------------------------
 
