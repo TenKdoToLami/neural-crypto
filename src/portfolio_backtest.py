@@ -178,12 +178,6 @@ def main():
     num_workers = max(1, os.cpu_count() - 2)
     print(f"[*] Using {num_workers} CPU cores for data preparation (leaving 2 free).")
     
-    # Priority order from eToro assets
-    priority_order = []
-    if os.path.exists("data/etoro_assets.txt"):
-        df_etoro = pd.read_csv("data/etoro_assets.txt")
-        priority_order = df_etoro['Symbol'].tolist()
-        
     # Ignored stablecoins
     ignored_stables = set()
     if os.path.exists("data/stables_ignore.txt"):
@@ -193,9 +187,6 @@ def main():
                 if pair:
                     ignored_stables.add(pair.replace("/", "_"))
 
-    # Anti-Cheating: Restrict strictly to top 10 assets
-    top_10_assets = ['BTC', 'ETH', 'BCH', 'XRP', 'DASH', 'LTC', 'ETC', 'API3', 'CRO', 'ETHFI']
-    
     csv_files = []
     if os.path.exists(args.data_dir):
         for f in os.listdir(args.data_dir):
@@ -295,14 +286,7 @@ def main():
     df_probs = df_probs[valid_idx]
     global_timeline = list(df_prices.index)
     
-    # Determine eToro priority order
-    def get_priority(asset_name):
-        base_symbol = asset_name.split('_')[0]
-        if base_symbol in top_10_assets:
-            return top_10_assets.index(base_symbol)
-        return 999999
-        
-    sorted_assets = sorted(list(aligned_signals.keys()), key=get_priority)
+    sorted_assets = sorted(list(aligned_signals.keys()))
 
     # PHASE 4: Chronological Simulation
     print("[*] Running realistic out-of-sample simulation (10% Dynamic Allocation)...")

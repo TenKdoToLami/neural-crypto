@@ -1,9 +1,20 @@
-# Data and Models
-/data/
-/models/
-/outputs/
-/logs/
+# Data (Ignore massive CSVs and DBs, but keep configs)
+/data/raw/
+/data/bear_market/
+/data/raw_live/
 /data/processed/
+/*.db
+
+# Allow tracking for our approved asset lists and blacklists
+!/data/*.txt
+
+# Models (Ignore large weights, keep the folder structure)
+/models/*.pth
+
+# Reports & Logs
+/reports/
+/logs/
+/outputs/
 
 # Python
 __pycache__/
@@ -12,29 +23,15 @@ __pycache__/
 *.so
 .Python
 env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual Environment
 venv/
-ENV/
+build/
+dist/
+*.egg-info/
 
 # IDEs
 .vscode/
 .idea/
+.DS_Store
 
 # Environment Variables
 .env

@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 from glob import glob
 from tqdm import tqdm
+from datetime import datetime
 
 # Add project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -114,7 +115,15 @@ def train():
             pbar.set_postfix({'loss': f"{loss.item():.4f}"})
             
         print(f"Epoch {epoch+1} summary: Avg Loss: {total_loss/len(train_loader):.4f}")
-        torch.save(model.state_dict(), f"models/sentinel_v1_slim.pth")
+        
+        # Save timestamped model for historical comparison
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+        model_name = f"sentinel_{timestamp}.pth"
+        torch.save(model.state_dict(), os.path.join('models', model_name))
+        
+        # Also overwrite best_model.pth for the live trader to use immediately
+        torch.save(model.state_dict(), f"models/best_model.pth")
+        print(f"[*] Model saved as {model_name} and best_model.pth")
 
 if __name__ == "__main__":
     os.makedirs('models', exist_ok=True)

@@ -1,0 +1,27 @@
+# Manually Approved Assets for Neural Sentinel V1
+# Add or remove assets here. The bot will automatically update on the next cron execution.
+# ---- #
+BTC/USDC
+ETH/USDC
+XRP/USDC
+BNB/USDC
+SOL/USDC
+# ---- #
+TRX/USDC
+DOGE/USDC
+NEAR/USDC
+ZEC/USDC
+ADA/USDC
+# ---- #
+BCH/USDC
+LINK/USDC
+FET/USDC
+XLM/USDC
+AAVE/USDC
+# ---- #
+SUI/USDC
+LTC/USDC
+AVAX/USDC
+HBAR/USDC
+TAO/USDC
+# ---- #

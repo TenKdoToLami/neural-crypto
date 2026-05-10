@@ -1,112 +1,66 @@
-# Neural Crypto Predictor
+# 🛡️ Neural Sentinel V1
+**Advanced Crypto Lifecycle Automation & Predictive Intelligence**
 
-A deep learning system to predict bullish rallies across multiple crypto assets using 15m candles.
+Neural Sentinel is a high-performance deep learning pipeline designed to identify high-probability bullish rallies across the cryptocurrency market. It combines a global "General Intelligence" model trained on 100+ assets with a rigorous, production-aligned validation system to ensure your trading edge is real and stable.
 
-## 🚀 Quick Start
+---
 
-### 1. Synchronize Data
-Fetch Top 100 volume leaders + your eToro whitelist. Skips stablecoins automatically.
+## 🚀 1. Setup & Training
+To build your own neural model, follow these three simple steps:
+
+### A. Synchronize Data
+Fetch the historical "Study Material" for the model.
 ```powershell
-python src/data/fetcher.py --limit 100
-```
-*   **Whitelist**: Add symbols to `data/etoro_assets.txt`
-*   **Blacklist**: Add stablecoins to `data/stables_ignore.txt`
-*   **Cooldown**: Skips assets updated within the last 2 days.
+# Initial Download (Fetch data since 2025)
+python src/data/fetcher.py --limit 100 --since 2025-01-01
 
-### 2. Train the Model
-Trains a hybrid CNN-Transformer-GRU model on your entire dataset.
+# Periodical "Top Up" (Run this to get the latest candles)
+python src/data/fetcher.py
+```
+*   **Intelligent Sync**: The fetcher automatically remembers which assets you have and only downloads the missing "Delta" candles.
+
+### B. Train the Model
+Train the Neural Network to recognize rally patterns.
 ```powershell
 python src/train.py
 ```
-*   **Slim-RAM**: Automatically uses `float16` compression to fit 10M+ samples into 32GB RAM.
-*   **Output**: Saves weights to `models/sentinel_v1_slim.pth`.
-
-### 3. Backtest a Single Asset
-Test the strategy on one specific coin with realistic fees.
-```powershell
-python src/backtest.py BTC_USDT_15m.csv --entry 0.95 --exit 0.3 --fee 0.01
-```
-
-### 4. Grand Portfolio Audit
-Scan your entire database and generate a sortable HTML dashboard.
-```powershell
-python src/portfolio_backtest.py --entry 0.95 --exit 0.3 --fee 0.01
-```
-*   **Output**: Open `reports/audit.html` in any browser.
-
-
-### 5. Setup Live Execution API Keys
-
-Before running the live bot, you must provide your Binance API keys. Create a `.env` file in the root directory:
-```powershell
-BINANCE_API_KEY=your_public_key_here
-BINANCE_SECRET=your_secret_key_here
-```
-*(If these are missing, the bot defaults to Paper Trading mode and only prints the trades).*
-
-### 6. Set Up a Cron Job
-
-Execute the live trader on a 15-minute schedule. The orchestrator automatically pauses for 5 seconds to ensure exchange data is settled.
-
-```powershell
-# Add the following line to your crontab
-*/15 * * * * cd /path/to/neural-crypto && /path/to/venv/bin/python -m src.live_trader >> data/live_trader.log 2>&1
-```
+*   **Hardware Optimized**: Uses an RTX 4070 (or similar) to process 1M+ samples in ~15 minutes.
+*   **Smart Naming**: Saves models with timestamps (e.g., `sentinel_20240510.pth`) and updates the `best_model.pth` alias.
 
 ---
 
-## 📊 Logging & Auditing
+## 🧪 2. Verification & Comparison
+Never trade a model without proving it works.
 
-The system maintains a persistent audit trail in a SQLite database located at `data/trading.db`. This allows for performance tracking and capital growth monitoring without manual spreadsheet entries.
+### A. Run the "Stress Test"
+The Model Tester puts your new model through two distinct market regimes:
+```powershell
+python src/model_tester.py
+```
+*   **BEAR (2022-2023)**: A blind "Stress Test" on data the model has never seen. This prevents overfitting.
+*   **LIVE (2025-Present)**: A "Recency Check" to ensure the model understands current market conditions.
 
-### 1. Daily Growth Tracking (`portfolio_history` table)
-Once every 24 hours (at midnight UTC), the orchestrator records a snapshot of your capital:
-*   **Total Value**: Your account equity (Cash + Value of all open positions) in USDC.
-*   **Free Cash**: Available liquidity for new trades.
-
-### 2. Transaction Audit (`trades` table)
-Every execution event is logged with full metadata:
-*   **PnL Calculation**: When a position is closed (SELL), the system automatically looks up the entry price from the database and records the **Profit/Loss %** and absolute **USDC gain/loss**.
-*   **Metadata**: Includes the model's prediction probability at the time of trade.
-
-### 3. Human-Readable Logs
-Console outputs are formatted with timestamps and severity levels. If running via cron as recommended, these are redirected to `data/live_trader.log`.
-
----
-
-## 🛠️ Components
-
-### 🟢 Live Trader (`src/live_trader.py`)
-Executes the live trading pipeline. It reads manually approved assets, fetches minimal data to save bandwidth, runs inference, and outputs predictive scores. Designed to be run via cron.
-
-| Parameter | Default | Description |
-| :--- | :--- | :--- |
-| `N/A` | `N/A` | No CLI arguments are required for production runs. |
-
-*   **Usage**: `python -m src.live_trader`
-*   **Asset Config**: Edit `data/approved_assets.txt` to add/remove assets dynamically.
-
-### 🛰️ Data Fetcher (`src/data/fetcher.py`)
-| Parameter | Default | Description |
-| :--- | :--- | :--- |
-| `--limit` | 100 | Number of top volume assets to track from Binance. |
-| `--days` | 365 | Days of history to download for new assets. |
-| `--timeframe`| 15m | Candle interval. |
-
-### 🧠 Data Processor (`src/data/processor.py`)
-*   **Features**: Relative Returns, Log Volume, RSI, ATR, Trend Deviation, EMA Distance.
-*   **Labeling**: 1 (Rally) if price increases 5% within the next 16 candles (4 hours).
-
-### 📈 Backtester (`src/backtest.py`)
-| Parameter | Default | Description |
-| :--- | :--- | :--- |
-| `--entry` | 0.8 | Probability threshold to open a position (0.0 to 1.0). |
-| `--exit` | 0.5 | Probability threshold to close a position. |
-| `--fee` | 0.01 | Trading fee per side (0.01 = 1.0% eToro standard). |
+### B. Compare Performance
+See how your different models stack up against each other and the market.
+```powershell
+python src/compare_models.py
+```
+*   **Benchmark**: Compares your return against a "Buy & Hold" baseline.
+*   **Metrics**: Shows Win Rate %, Total Trades, and Return % side-by-side.
 
 ---
 
-## 💡 Strategy Tips
-*   **eToro Users**: Because of the 1% fee, use a high `--entry` (0.90+) to ensure you only take the highest quality "Sniper" setups.
-*   **Binance Users**: You can lower the `--fee` to 0.001 (0.1%) and the `--entry` to 0.8 for more frequent, high-volume trading.
-*   **Time in Cash**: A healthy strategy should spend 70-90% of its time in cash, waiting for clear trend breakouts.
+## 🔌 3. Binance Integration
+Neural Sentinel uses the **Binance API** via the CCXT library for two primary functions:
+
+1.  **Data Acquisition**: The `fetcher.py` script scans the Top 100 assets by volume on Binance and downloads 15-minute OHLCV candles directly to your `data/raw/` folder.
+2.  **Live Inference**: The live bot connects to Binance to get real-time price snapshots and execute trades based on the model's predictions.
+
+---
+
+## 📁 Repository Structure
+*   `src/data/`: Data fetching and technical indicator processing.
+*   `src/models/`: Neural Network architecture (CNN-Transformer-GRU hybrid).
+*   `reports/`: JSON audit logs of every backtest performed.
+*   `models/`: All saved `.pth` model versions.
+*   `data/approved_assets.txt`: Your whitelist of coins the bot is allowed to trade.
