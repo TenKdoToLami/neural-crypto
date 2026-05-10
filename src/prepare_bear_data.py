@@ -36,16 +36,19 @@ class BearDataFetcher:
         
         # Check if already complete
         if os.path.exists(filename):
-            df = pd.read_csv(filename)
-            if not df.empty:
-                first = pd.to_datetime(df['timestamp'].iloc[0])
-                last = pd.to_datetime(df['timestamp'].iloc[-1])
-                # If it covers Jan 2023 and Dec 2024, we are good
-                if first <= datetime(2023, 1, 2) and last >= datetime(2024, 12, 30):
-                    print(f"  [=] {symbol}: Bear Market data already exists and is complete. Skipping.")
-                    return
+            try:
+                df = pd.read_csv(filename)
+                if not df.empty:
+                    first = pd.to_datetime(df['timestamp'].iloc[0])
+                    last = pd.to_datetime(df['timestamp'].iloc[-1])
+                    # Check if it covers 2022-01-01 to 2023-12-31
+                    if first <= datetime(2022, 1, 2) and last >= datetime(2023, 12, 30):
+                        print(f"  [=] {symbol}: 2022-2023 history already exists. Skipping.")
+                        return
+            except Exception as e:
+                print(f"  [!] Error checking {filename}: {e}")
 
-        print(f"  [+] {symbol}: Downloading 2023-2024 history...")
+        print(f"  [+] {symbol}: Downloading 2022-2023 history...")
         all_ohlcv = []
         since = self.start_ts
         
@@ -62,7 +65,7 @@ class BearDataFetcher:
                 df = pd.DataFrame(all_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
                 df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
                 # Filter strictly to the period
-                df = df[df['timestamp'] <= "2024-12-31 23:59:59"]
+                df = df[(df['timestamp'] >= "2022-01-01") & (df['timestamp'] <= "2023-12-31 23:59:59")]
                 df.to_csv(filename, index=False)
                 print(f"  [✓] {symbol}: Saved {len(df)} candles.")
         except Exception as e:

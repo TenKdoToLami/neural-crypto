@@ -113,7 +113,7 @@ class BinanceTrader:
             return
 
         target_trade_quote = total_value * self.target_allocation
-        logger.info(f"[Trader] Target Allocation Size (4.8%): ${target_trade_quote:.2f} {self.quote_currency}")
+        logger.info(f"[Trader] Target Allocation Size ({self.target_allocation*100:.1f}%): ${target_trade_quote:.2f} {self.quote_currency}")
 
         # --- SQL Logging ---
         now_utc = datetime.utcnow()
