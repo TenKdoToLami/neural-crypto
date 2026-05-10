@@ -63,7 +63,9 @@ class LiveInferenceEngine:
                 
                 # Inference
                 with torch.no_grad():
-                    with torch.cuda.amp.autocast(enabled=(self.device.type == 'cuda')):
+                    # Using the modern torch.amp.autocast to avoid deprecation warnings
+                    device_type = 'cuda' if self.device.type == 'cuda' else 'cpu'
+                    with torch.amp.autocast(device_type=device_type, enabled=(self.device.type == 'cuda')):
                         rally_logits, vol_est = self.model(x_tensor)
                         
                         # Apply sigmoid for classification probability
