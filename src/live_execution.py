@@ -176,6 +176,8 @@ class BinanceTrader:
                                 
                         # Deduct from local tracker so we don't overdraft (works for both live and paper)
                         free_quote -= target_trade_quote
+                        # Mark as held locally to ensure diversification in the same cycle
+                        holdings[symbol] = amount_to_buy
                         
                     else:
                         print(f"[!] Insufficient {self.quote_currency} to buy {symbol} (Need ${target_trade_quote:.2f}, Have ${free_quote:.2f})")
