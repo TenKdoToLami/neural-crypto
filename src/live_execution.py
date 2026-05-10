@@ -64,10 +64,18 @@ class BinanceTrader:
                         
                         # Only track it if value is > $2 (ignores tiny dust)
                         if value_quote > 2.0:
-                            holdings[symbol_quote] = amt 
+                            holdings[symbol_quote] = {
+                                'amount': amt,
+                                'value': value_quote
+                            }
                             total_crypto_value += value_quote
                             
             total_portfolio = free_quote + total_crypto_value
+            
+            # Add percentages
+            for sym in holdings:
+                holdings[sym]['pct'] = (holdings[sym]['value'] / total_portfolio) * 100
+                
             return total_portfolio, free_quote, holdings
             
         except Exception as e:
@@ -89,6 +97,13 @@ class BinanceTrader:
         
         total_value, free_quote, holdings = self.get_portfolio_value()
         print(f"[Trader] Total Portfolio: ${total_value:.2f} | Free {self.quote_currency}: ${free_quote:.2f}")
+        
+        if holdings:
+            print("[Trader] Current Holdings (> $2):")
+            for sym, info in holdings.items():
+                print(f"    - {sym:10} | {info['pct']:5.1f}% | ${info['value']:7.2f} | {info['amount']:12.6f} units")
+        else:
+            print("[Trader] Current Holdings: None")
         
         if total_value <= 0:
             print("[Trader] Portfolio value is zero or fetch failed. Aborting execution.")
@@ -117,7 +132,8 @@ class BinanceTrader:
         # =====================================================================
         # STEP 1: LIQUIDATE (SELL)
         # =====================================================================
-        for symbol, amount in holdings.items():
+        for symbol, info in holdings.items():
+            amount = info['amount']
             if symbol in pred_map:
                 prob = pred_map[symbol]['rally_prob']
                 if prob < self.exit_threshold:
