@@ -11,8 +11,11 @@ class BinanceTrader:
         self.secret = os.getenv('BINANCE_SECRET')
         self.paper_trade = paper_trade
         
-        # Target allocation per asset (4.8%)
+        # Configuration
+        self.quote_currency = "USDC"
         self.target_allocation = 0.048
+        self.entry_threshold = 0.95
+        self.exit_threshold = 0.35
         
         if not self.api_key or not self.secret:
             print("[Trader] WARNING: API keys not found in .env. Defaulting to paper trading.")
@@ -39,29 +42,32 @@ class BinanceTrader:
             
         try:
             balance = self.exchange.fetch_balance()
-            free_usdt = balance.get('USDT', {}).get('free', 0.0)
+            free_quote = balance.get(self.quote_currency, {}).get('free', 0.0)
             
             holdings = {}
             total_crypto_value = 0.0
             
             # Find all held assets with non-zero balance
             for currency, amt in balance['total'].items():
-                if amt > 0 and currency != 'USDT':
-                    symbol = f"{currency}/USDT"
-                    # We only care about assets that actually trade against USDT
-                    if symbol in self.exchange.markets:
-                        # Estimate value using current ticker
-                        ticker = self.exchange.fetch_ticker(symbol)
+                if amt > 0 and currency != self.quote_currency:
+                    # Map back to the symbol used by the inference engine (USDT)
+                    # so that liquidate logic can find it in the pred_map.
+                    symbol_usdt = f"{currency}/USDT"
+                    symbol_quote = f"{currency}/{self.quote_currency}"
+                    
+                    # Estimate value using current ticker (we use USDC ticker for real value)
+                    if symbol_quote in self.exchange.markets:
+                        ticker = self.exchange.fetch_ticker(symbol_quote)
                         current_price = ticker['last']
-                        value_usdt = amt * current_price
+                        value_quote = amt * current_price
                         
                         # Only track it if value is > $2 (ignores tiny dust)
-                        if value_usdt > 2.0:
-                            holdings[symbol] = amt
-                            total_crypto_value += value_usdt
+                        if value_quote > 2.0:
+                            holdings[symbol_usdt] = amt # Use USDT key for logic compatibility
+                            total_crypto_value += value_quote
                             
-            total_portfolio = free_usdt + total_crypto_value
-            return total_portfolio, free_usdt, holdings
+            total_portfolio = free_quote + total_crypto_value
+            return total_portfolio, free_quote, holdings
             
         except Exception as e:
             print(f"[Trader] Error fetching portfolio: {e}")
@@ -80,15 +86,15 @@ class BinanceTrader:
         print("\n" + "-"*40)
         print(" PORTFOLIO EXECUTION ".center(40, "-"))
         
-        total_value, free_usdt, holdings = self.get_portfolio_value()
-        print(f"[Trader] Total Portfolio: ${total_value:.2f} | Free USDT: ${free_usdt:.2f}")
+        total_value, free_quote, holdings = self.get_portfolio_value()
+        print(f"[Trader] Total Portfolio: ${total_value:.2f} | Free {self.quote_currency}: ${free_quote:.2f}")
         
         if total_value <= 0:
             print("[Trader] Portfolio value is zero or fetch failed. Aborting execution.")
             return
 
-        target_trade_usdt = total_value * self.target_allocation
-        print(f"[Trader] Target Allocation Size (4.8%): ${target_trade_usdt:.2f}")
+        target_trade_quote = total_value * self.target_allocation
+        print(f"[Trader] Target Allocation Size (4.8%): ${target_trade_quote:.2f} {self.quote_currency}")
 
         # Convert predictions to a dict for fast lookup
         # e.g. {'BTC/USDT': {'rally_prob': 0.8, 'last_close': 65000}}
@@ -100,13 +106,15 @@ class BinanceTrader:
         for symbol, amount in holdings.items():
             if symbol in pred_map:
                 prob = pred_map[symbol]['rally_prob']
-                if prob < 0.3:
-                    print(f"[-] LIQUIDATING {symbol} | Prob: {prob:.2f} < 0.3")
+                if prob < self.exit_threshold:
+                    print(f"[-] LIQUIDATING {symbol} | Prob: {prob:.2f} < {self.exit_threshold}")
                     if not self.paper_trade:
                         try:
+                            # Convert symbol to use the current quote currency (USDC)
+                            symbol_quote = symbol.replace('/USDT', f'/{self.quote_currency}')
                             # Send market sell for the entire balance
-                            order = self.exchange.create_market_sell_order(symbol, amount)
-                            print(f"    -> Sold {amount} of {symbol}")
+                            order = self.exchange.create_market_sell_order(symbol_quote, amount)
+                            print(f"    -> Sold {amount} of {symbol_quote}")
                         except Exception as e:
                             print(f"    -> [!] Sell Failed: {e}")
             else:
@@ -114,48 +122,49 @@ class BinanceTrader:
                 # but for safety, we just leave it alone here.
                 pass
 
-        # Refresh free USDT after sells
+        # Refresh free quote after sells
         if not self.paper_trade:
             # small delay to let Binance update balances
             import time
             time.sleep(1)
-            _, free_usdt, holdings = self.get_portfolio_value()
+            _, free_quote, holdings = self.get_portfolio_value()
             
         # =====================================================================
         # STEP 2: ALLOCATE (BUY)
         # =====================================================================
         for symbol in approved_assets_ordered:
-            # We only buy if it scored > 0.95
+            # We only buy if it scored > entry_threshold
             if symbol in pred_map:
                 prob = pred_map[symbol]['rally_prob']
                 
-                if prob > 0.95:
+                if prob > self.entry_threshold:
                     # Check if we already hold it
                     if symbol in holdings:
                         print(f"[~] Skipping {symbol} | Prob {prob:.2f} | Already held.")
                         continue
                         
                     # Check if we have enough cash for a full allocation block
-                    # (Binance typically has a $5-$10 min order size anyway)
-                    if free_usdt >= target_trade_usdt and target_trade_usdt > 10.0:
+                    if free_quote >= target_trade_quote and target_trade_quote > 10.0:
                         price = pred_map[symbol]['last_close']
-                        amount_to_buy = target_trade_usdt / price
+                        amount_to_buy = target_trade_quote / price
                         
-                        print(f"[+] BUYING {symbol} | Prob: {prob:.2f} > 0.95")
-                        print(f"    -> Size: ${target_trade_usdt:.2f} ({amount_to_buy:.6f} units)")
+                        print(f"[+] BUYING {symbol} | Prob: {prob:.2f} > {self.entry_threshold}")
+                        print(f"    -> Size: ${target_trade_quote:.2f} ({amount_to_buy:.6f} units)")
                         
                         if not self.paper_trade:
                             try:
-                                order = self.exchange.create_market_buy_order(symbol, amount_to_buy)
+                                # Convert symbol to use the current quote currency (USDC)
+                                symbol_quote = symbol.replace('/USDT', f'/{self.quote_currency}')
+                                order = self.exchange.create_market_buy_order(symbol_quote, amount_to_buy)
                                 print("    -> Order Success")
                             except Exception as e:
                                 print(f"    -> [!] Buy Failed: {e}")
                                 
-                        # Deduct from local free_usdt tracker so we don't overdraft (works for both live and paper)
-                        free_usdt -= target_trade_usdt
+                        # Deduct from local tracker so we don't overdraft (works for both live and paper)
+                        free_quote -= target_trade_quote
                         
                     else:
-                        print(f"[!] Insufficient USDT to buy {symbol} (Need ${target_trade_usdt:.2f}, Have ${free_usdt:.2f})")
+                        print(f"[!] Insufficient {self.quote_currency} to buy {symbol} (Need ${target_trade_quote:.2f}, Have ${free_quote:.2f})")
                         
         print("-" * 40)
 
@@ -164,5 +173,5 @@ if __name__ == "__main__":
     trader = BinanceTrader(paper_trade=False)
     total, free, holdings = trader.get_portfolio_value()
     print(f"Total Portfolio: ${total:.2f}")
-    print(f"Free USDT: ${free:.2f}")
+    print(f"Free USDC: ${free:.2f}")
     print("Current Holdings:", holdings)
