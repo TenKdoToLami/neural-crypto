@@ -68,10 +68,28 @@ class DataFetcher:
         sorted_pairs = sorted(usdt_pairs, key=lambda x: x['quoteVolume'], reverse=True)
         top_symbols = [p['symbol'] for p in sorted_pairs[:limit]]
         
-        final_list = list(set(top_symbols) | whitelist)
+        # Combine Whitelist + Top Volume (De-duplicate by base asset)
+        final_list = []
+        seen_bases = set()
+        
+        # 1. Priority: Whitelist (usually USDC)
+        for s in whitelist:
+            base = s.split('/')[0]
+            if base not in seen_bases:
+                final_list.append(s)
+                seen_bases.add(base)
+        
+        # 2. Secondary: Top Volume (usually USDT)
+        for s in top_symbols:
+            base = s.split('/')[0]
+            if base not in seen_bases:
+                final_list.append(s)
+                seen_bases.add(base)
+
+        # Final safety filter against blacklist
         final_list = [s for s in final_list if s not in self.ignored_stables]
         
-        print(f"Total targets: {len(final_list)} (Top {limit} + Whitelist)")
+        print(f"Total unique targets: {len(final_list)} (Base de-duplication active)")
         return final_list
 
     def fetch_ohlcv(self, symbol, timeframe='15m', days=365, since_date=None):
