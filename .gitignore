@@ -35,3 +35,8 @@ dist/
 
 # Environment Variables
 .env
+
+
+
+.log
+.db
