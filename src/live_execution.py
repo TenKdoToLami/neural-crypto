@@ -160,9 +160,8 @@ class BinanceTrader:
         print("-" * 40)
 
 if __name__ == "__main__":
-    # Test block to verify API keys and portfolio value
     print("Testing Binance API Connection...")
-    trader = BinanceTrader(paper_trade=True)
+    trader = BinanceTrader(paper_trade=False)
     total, free, holdings = trader.get_portfolio_value()
     print(f"Total Portfolio: ${total:.2f}")
     print(f"Free USDT: ${free:.2f}")
