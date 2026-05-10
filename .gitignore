@@ -38,5 +38,5 @@ dist/
 
 
 
-.log
-.db
+*.log
+*.db
