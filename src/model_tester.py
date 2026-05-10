@@ -101,7 +101,7 @@ class ModelTester:
             all_signals[symbol] = signal_df
 
         # --- Portfolio Simulation Loop ---
-        print(f"[*] Simulating Portfolio Logic (20 assets, 4.8% alloc)...")
+        print(f"[*] Simulating Portfolio Logic (10 assets, 9.6% alloc)...")
         
         # Combine all timestamps
         all_times = sorted(list(set().union(*[df.timestamp.tolist() for df in all_signals.values()])))
@@ -155,7 +155,7 @@ class ModelTester:
                 })
 
             # 2. Check Entries
-            if len(active_trades) < 20:
+            if len(active_trades) < 10:
                 candidates = []
                 for sym, asset_df in all_signals.items():
                     if sym in active_trades: continue
@@ -167,8 +167,8 @@ class ModelTester:
                 
                 candidates.sort(key=lambda x: x[1], reverse=True)
                 for sym, prob, price in candidates:
-                    if len(active_trades) >= 20: break
-                    alloc_size = current_total_value * 0.048
+                    if len(active_trades) >= 10: break
+                    alloc_size = current_total_value * 0.096
                     if portfolio_cash >= alloc_size:
                         buy_value = alloc_size * (1 - self.fee)
                         amount = buy_value / price
