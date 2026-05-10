@@ -34,7 +34,7 @@ def run_loop():
             
             # Execute trades
             # Pass paper_trade=False when you are ready to use real money
-            trader = BinanceTrader(paper_trade=True) 
+            trader = BinanceTrader(paper_trade=False) 
             trader.execute_trades(preds, fetcher.get_approved_assets())
         else:
             print("No predictions generated.")
