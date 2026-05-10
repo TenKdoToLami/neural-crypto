@@ -2,6 +2,7 @@ import os
 import ccxt
 import pandas as pd
 from dotenv import load_dotenv
+from datetime import datetime
 
 class BinanceTrader:
     def __init__(self, paper_trade=False):
@@ -95,6 +96,19 @@ class BinanceTrader:
 
         target_trade_quote = total_value * self.target_allocation
         print(f"[Trader] Target Allocation Size (4.8%): ${target_trade_quote:.2f} {self.quote_currency}")
+
+        # --- Daily Midnight Logging ---
+        # If this is the midnight run (00:00 - 00:15 UTC), save the total value to a performance tracker
+        now_utc = datetime.utcnow()
+        if now_utc.hour == 0 and now_utc.minute < 15:
+            perf_file = "data/daily_value.csv"
+            exists = os.path.exists(perf_file)
+            with open(perf_file, "a") as f:
+                if not exists:
+                    f.write("timestamp,total_value_usdc\n")
+                f.write(f"{now_utc.strftime('%Y-%m-%d %H:%M:%S')},{total_value:.2f}\n")
+            print(f"[Daily Report] Saved daily portfolio snapshot: ${total_value:.2f} {self.quote_currency}")
+        # ------------------------------
 
         # Convert predictions to a dict for fast lookup
         # e.g. {'BTC/USDT': {'rally_prob': 0.8, 'last_close': 65000}}
