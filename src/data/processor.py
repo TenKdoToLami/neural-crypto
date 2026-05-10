@@ -76,9 +76,13 @@ class DataProcessor:
         
         data_df = (df[features] - rolling_mean) / rolling_std
         data = data_df.values
-        labels = df['target'].values
         
-        return data.astype(np.float32), labels.astype(np.int32)
+        if 'target' in df.columns:
+            labels = df['target'].values.astype(np.int32)
+        else:
+            labels = None
+        
+        return data.astype(np.float32), labels
 
     def prepare_sequences(self, df):
         """Convert dataframe into X (sequences) and y (labels) using sliding window."""

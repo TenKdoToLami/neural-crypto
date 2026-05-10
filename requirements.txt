@@ -8,3 +8,4 @@ pandas-ta-classic
 scikit-learn
 matplotlib
 tqdm
+python-dotenv

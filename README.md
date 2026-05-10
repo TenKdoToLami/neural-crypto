@@ -34,9 +34,38 @@ python src/portfolio_backtest.py --entry 0.95 --exit 0.3 --fee 0.01
 ```
 *   **Output**: Open `reports/audit.html` in any browser.
 
+
+### 5. Setup Live Execution API Keys
+
+Before running the live bot, you must provide your Binance API keys. Create a `.env` file in the root directory:
+```powershell
+BINANCE_API_KEY=your_public_key_here
+BINANCE_SECRET=your_secret_key_here
+```
+*(If these are missing, the bot defaults to Paper Trading mode and only prints the trades).*
+
+### 6. Set Up a Cron Job
+
+Execute the live trader on a 15-minute schedule. The orchestrator automatically pauses for 5 seconds to ensure exchange data is settled.
+
+```powershell
+# Add the following line to your crontab
+*/15 * * * * cd /path/to/neural-crypto && /path/to/venv/bin/python -m src.live_trader >> data/live_trader.log 2>&1
+```
+
 ---
 
 ## 🛠️ Components
+
+### 🟢 Live Trader (`src/live_trader.py`)
+Executes the live trading pipeline. It reads manually approved assets, fetches minimal data to save bandwidth, runs inference, and outputs predictive scores. Designed to be run via cron.
+
+| Parameter | Default | Description |
+| :--- | :--- | :--- |
+| `N/A` | `N/A` | No CLI arguments are required for production runs. |
+
+*   **Usage**: `python -m src.live_trader`
+*   **Asset Config**: Edit `data/approved_assets.txt` to add/remove assets dynamically.
 
 ### 🛰️ Data Fetcher (`src/data/fetcher.py`)
 | Parameter | Default | Description |
