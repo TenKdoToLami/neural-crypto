@@ -104,7 +104,15 @@ class BinanceTrader:
         if holdings:
             logger.info("[Trader] Current Holdings (> $2):")
             for sym, info in holdings.items():
-                logger.info(f"    - {sym:10} | {info['pct']:5.1f}% | ${info['value']:7.2f} | {info['amount']:12.6f} units")
+                # Try to get PnL from DB
+                entry_price = db_manager.get_last_buy_price(sym)
+                pnl_str = ""
+                if entry_price:
+                    pnl_pct = ((info['price'] - entry_price) / entry_price) * 100
+                    pnl_raw = (info['price'] - entry_price) * info['amount']
+                    pnl_str = f" | {pnl_pct:+6.2f}% (${pnl_raw:+7.2f})"
+                
+                logger.info(f"    - {sym:10} | {info['pct']:5.1f}% | ${info['value']:7.2f} | {info['amount']:12.6f} units{pnl_str}")
         else:
             logger.info("[Trader] Current Holdings: None")
         
