@@ -22,26 +22,13 @@ class DataFetcher:
                 self.ignored_stables = set(line.strip() for line in f if line.strip())
 
     def get_top_assets(self, limit=100):
-        """Fetch symbols from existing files, OR volume leaders if empty."""
-        existing_symbols = []
-        if os.path.exists(self.data_dir):
-            for f in os.listdir(self.data_dir):
-                if f.endswith('.csv'):
-                    # Convert 'BTC_USDT_15m.csv' -> 'BTC/USDT'
-                    symbol = f.split('_15m.csv')[0].replace('_', '/')
-                    existing_symbols.append(symbol)
-        
-        if existing_symbols:
-            print(f"Found {len(existing_symbols)} existing assets in {self.data_dir}. Updating them...")
-            return existing_symbols
-
-        print(f"No existing data found. Fetching Top {limit} volume leaders...")
-        tickers = self.exchange.fetch_tickers()
-        
-        # 1. Load Whitelist from approved assets
+        """Fetch symbols from whitelist, existing files, or volume leaders."""
+        # 1. Always load Whitelist from approved assets first
         whitelist = set()
         if os.path.exists(self.whitelist_file):
             try:
+                # We need tickers to validate symbol existence
+                tickers = self.exchange.fetch_tickers()
                 with open(self.whitelist_file, 'r') as f:
                     for line in f:
                         line = line.strip()
@@ -53,20 +40,35 @@ class DataFetcher:
             except Exception as e:
                 print(f"Warning: Could not load approved assets: {e}")
 
-        # Only fetch /USDT pairs that are NOT in our blacklist
+        # 2. Check for existing files in data/raw
+        existing_symbols = []
+        if os.path.exists(self.data_dir):
+            for f in os.listdir(self.data_dir):
+                if f.endswith('.csv'):
+                    symbol = f.split('_15m.csv')[0].replace('_', '/')
+                    existing_symbols.append(symbol)
+        
+        # 3. Decision Logic
+        if existing_symbols:
+            # Combine existing files with the whitelist (to catch any new additions)
+            final_list = list(set(existing_symbols) | whitelist)
+            print(f"Found {len(existing_symbols)} existing assets. Merged with whitelist -> {len(final_list)} targets.")
+            return final_list
+
+        # 4. Fallback to Volume Leaders (for initial setup)
+        print(f"No existing data. Fetching Top {limit} volume leaders...")
+        if 'tickers' not in locals():
+            tickers = self.exchange.fetch_tickers()
+            
         usdt_pairs = []
         for symbol, t in tickers.items():
             if symbol.endswith('/USDT') and symbol not in self.ignored_stables:
                 usdt_pairs.append(t)
         
-        # Sort by volume
         sorted_pairs = sorted(usdt_pairs, key=lambda x: x['quoteVolume'], reverse=True)
         top_symbols = [p['symbol'] for p in sorted_pairs[:limit]]
         
-        # Combine Whitelist + Top Volume (Unique set)
         final_list = list(set(top_symbols) | whitelist)
-        
-        # Final safety filter against blacklist
         final_list = [s for s in final_list if s not in self.ignored_stables]
         
         print(f"Total targets: {len(final_list)} (Top {limit} + Whitelist)")
