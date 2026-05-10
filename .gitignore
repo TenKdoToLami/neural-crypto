@@ -1,6 +1,9 @@
 # Data (Ignore massive CSVs and DBs, but keep configs)
 /data/raw/
-/data/bear_market/
+data/raw_live/
+data/processed/
+data/processed_flat/
+data/bear_market/
 /data/raw_live/
 /data/processed/
 /*.db
