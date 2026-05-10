@@ -30,7 +30,7 @@ def run_loop():
         
         print("\n[Latest Predictions]")
         if not preds.empty:
-            print(preds.head(10).to_string())
+            print(preds.to_string())
             
             # Execute trades
             # Pass paper_trade=False when you are ready to use real money

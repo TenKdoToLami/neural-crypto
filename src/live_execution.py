@@ -148,10 +148,13 @@ class BinanceTrader:
                             try:
                                 order = self.exchange.create_market_buy_order(symbol, amount_to_buy)
                                 print("    -> Order Success")
-                                # Deduct from local free_usdt tracker so we don't overdraft
-                                free_usdt -= target_trade_usdt
                             except Exception as e:
                                 print(f"    -> [!] Buy Failed: {e}")
+                                
+                        # Deduct from local free_usdt tracker so we don't overdraft (works for both live and paper)
+                        free_usdt -= target_trade_usdt
+                        
+                    else:
                         print(f"[!] Insufficient USDT to buy {symbol} (Need ${target_trade_usdt:.2f}, Have ${free_usdt:.2f})")
                         
         print("-" * 40)
