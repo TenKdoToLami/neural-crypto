@@ -64,7 +64,7 @@ class BinanceTrader:
                         
                         # Only track it if value is > $2 (ignores tiny dust)
                         if value_quote > 2.0:
-                            holdings[symbol_usdt] = amt # Use USDT key for logic compatibility
+                            holdings[symbol_quote] = amt 
                             total_crypto_value += value_quote
                             
             total_portfolio = free_quote + total_crypto_value
@@ -124,11 +124,9 @@ class BinanceTrader:
                     print(f"[-] LIQUIDATING {symbol} | Prob: {prob:.2f} < {self.exit_threshold}")
                     if not self.paper_trade:
                         try:
-                            # Convert symbol to use the current quote currency (USDC)
-                            symbol_quote = symbol.replace('/USDT', f'/{self.quote_currency}')
                             # Send market sell for the entire balance
-                            order = self.exchange.create_market_sell_order(symbol_quote, amount)
-                            print(f"    -> Sold {amount} of {symbol_quote}")
+                            order = self.exchange.create_market_sell_order(symbol, amount)
+                            print(f"    -> Sold {amount} of {symbol}")
                         except Exception as e:
                             print(f"    -> [!] Sell Failed: {e}")
             else:
@@ -167,9 +165,7 @@ class BinanceTrader:
                         
                         if not self.paper_trade:
                             try:
-                                # Convert symbol to use the current quote currency (USDC)
-                                symbol_quote = symbol.replace('/USDT', f'/{self.quote_currency}')
-                                order = self.exchange.create_market_buy_order(symbol_quote, amount_to_buy)
+                                order = self.exchange.create_market_buy_order(symbol, amount_to_buy)
                                 print("    -> Order Success")
                             except Exception as e:
                                 print(f"    -> [!] Buy Failed: {e}")
