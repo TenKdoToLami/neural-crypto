@@ -55,6 +55,25 @@ Execute the live trader on a 15-minute schedule. The orchestrator automatically 
 
 ---
 
+## 📊 Logging & Auditing
+
+The system maintains a persistent audit trail in a SQLite database located at `data/trading.db`. This allows for performance tracking and capital growth monitoring without manual spreadsheet entries.
+
+### 1. Daily Growth Tracking (`portfolio_history` table)
+Once every 24 hours (at midnight UTC), the orchestrator records a snapshot of your capital:
+*   **Total Value**: Your account equity (Cash + Value of all open positions) in USDC.
+*   **Free Cash**: Available liquidity for new trades.
+
+### 2. Transaction Audit (`trades` table)
+Every execution event is logged with full metadata:
+*   **PnL Calculation**: When a position is closed (SELL), the system automatically looks up the entry price from the database and records the **Profit/Loss %** and absolute **USDC gain/loss**.
+*   **Metadata**: Includes the model's prediction probability at the time of trade.
+
+### 3. Human-Readable Logs
+Console outputs are formatted with timestamps and severity levels. If running via cron as recommended, these are redirected to `data/live_trader.log`.
+
+---
+
 ## 🛠️ Components
 
 ### 🟢 Live Trader (`src/live_trader.py`)

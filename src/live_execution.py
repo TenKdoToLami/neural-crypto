@@ -1,8 +1,12 @@
 import os
 import ccxt
 import pandas as pd
+import json
+import time
 from dotenv import load_dotenv
 from datetime import datetime
+from src.utils.logger import logger
+from src.utils.db import db_manager
 
 class BinanceTrader:
     def __init__(self, paper_trade=False):
@@ -19,7 +23,7 @@ class BinanceTrader:
         self.exit_threshold = 0.35
         
         if not self.api_key or not self.secret:
-            print("[Trader] WARNING: API keys not found in .env. Defaulting to paper trading.")
+            logger.warning("[Trader] API keys not found in .env. Defaulting to paper trading.")
             self.paper_trade = True
             
         self.exchange = ccxt.binance({
@@ -33,7 +37,7 @@ class BinanceTrader:
             if not self.paper_trade:
                 self.exchange.load_markets()
         except Exception as e:
-            print(f"[Trader] Could not load markets: {e}")
+            logger.error(f"[Trader] Could not load markets: {e}")
 
     def get_portfolio_value(self):
         """Returns total portfolio value in USDT and a dict of current holdings."""
@@ -52,8 +56,6 @@ class BinanceTrader:
             for currency, amt in balance['total'].items():
                 if amt > 0 and currency != self.quote_currency:
                     # Map back to the symbol used by the inference engine (USDT)
-                    # so that liquidate logic can find it in the pred_map.
-                    symbol_usdt = f"{currency}/USDT"
                     symbol_quote = f"{currency}/{self.quote_currency}"
                     
                     # Estimate value using current ticker (we use USDC ticker for real value)
@@ -66,7 +68,8 @@ class BinanceTrader:
                         if value_quote > 2.0:
                             holdings[symbol_quote] = {
                                 'amount': amt,
-                                'value': value_quote
+                                'value': value_quote,
+                                'price': current_price
                             }
                             total_crypto_value += value_quote
                             
@@ -79,7 +82,7 @@ class BinanceTrader:
             return total_portfolio, free_quote, holdings
             
         except Exception as e:
-            print(f"[Trader] Error fetching portfolio: {e}")
+            logger.error(f"[Trader] Error fetching portfolio: {e}")
             return 0.0, 0.0, {}
 
     def execute_trades(self, preds_df, approved_assets_ordered):
@@ -89,50 +92,38 @@ class BinanceTrader:
         approved_assets_ordered: List of strings in exact order from the text file
         """
         if preds_df.empty:
-            print("[Trader] No predictions to act on.")
+            logger.info("[Trader] No predictions to act on.")
             return
             
-        print("\n" + "-"*40)
-        print(" PORTFOLIO EXECUTION ".center(40, "-"))
+        logger.info("-" * 40)
+        logger.info(" PORTFOLIO EXECUTION ".center(40, "-"))
         
         total_value, free_quote, holdings = self.get_portfolio_value()
-        print(f"[Trader] Total Portfolio: ${total_value:.2f} | Free {self.quote_currency}: ${free_quote:.2f}")
+        logger.info(f"[Trader] Total Portfolio: ${total_value:.2f} | Free {self.quote_currency}: ${free_quote:.2f}")
         
         if holdings:
-            print("[Trader] Current Holdings (> $2):")
+            logger.info("[Trader] Current Holdings (> $2):")
             for sym, info in holdings.items():
-                print(f"    - {sym:10} | {info['pct']:5.1f}% | ${info['value']:7.2f} | {info['amount']:12.6f} units")
+                logger.info(f"    - {sym:10} | {info['pct']:5.1f}% | ${info['value']:7.2f} | {info['amount']:12.6f} units")
         else:
-            print("[Trader] Current Holdings: None")
+            logger.info("[Trader] Current Holdings: None")
         
         if total_value <= 0:
-            print("[Trader] Portfolio value is zero or fetch failed. Aborting execution.")
+            logger.error("[Trader] Portfolio value is zero or fetch failed. Aborting execution.")
             return
 
         target_trade_quote = total_value * self.target_allocation
-        print(f"[Trader] Target Allocation Size (4.8%): ${target_trade_quote:.2f} {self.quote_currency}")
+        logger.info(f"[Trader] Target Allocation Size (4.8%): ${target_trade_quote:.2f} {self.quote_currency}")
 
-        # --- Daily Midnight Logging ---
-        # If this is the midnight run (00:00 - 00:15 UTC), save the total value to a performance tracker
+        # --- SQL Logging ---
         now_utc = datetime.utcnow()
         if now_utc.hour == 0 and now_utc.minute < 15:
-            import json
-            perf_file = "data/daily_value.csv"
-            exists = os.path.exists(perf_file)
-            
-            # Create a simplified holdings map for the log
-            holdings_log = {sym: f"{info['amount']:.6f}" for sym, info in holdings.items()}
-            holdings_json = json.dumps(holdings_log).replace('"', '""') # Escape quotes for CSV
-            
-            with open(perf_file, "a") as f:
-                if not exists:
-                    f.write("timestamp,total_value_usdc,holdings_json\n")
-                f.write(f"{now_utc.strftime('%Y-%m-%d %H:%M:%S')},{total_value:.2f},\"{holdings_json}\"\n")
-            print(f"[Daily Report] Saved daily portfolio snapshot: ${total_value:.2f} {self.quote_currency}")
+            # Save portfolio snapshot to SQL (Once Daily at Midnight)
+            db_manager.save_portfolio_snapshot(total_value, free_quote)
+            logger.info(f"[Daily Report] Midnight SQL snapshot recorded: ${total_value:.2f} USDC")
         # ------------------------------
 
         # Convert predictions to a dict for fast lookup
-        # e.g. {'BTC/USDT': {'rally_prob': 0.8, 'last_close': 65000}}
         pred_map = preds_df.set_index('symbol').to_dict('index')
 
         # =====================================================================
@@ -140,72 +131,84 @@ class BinanceTrader:
         # =====================================================================
         for symbol, info in holdings.items():
             amount = info['amount']
+            current_price = info['price']
             if symbol in pred_map:
                 prob = pred_map[symbol]['rally_prob']
                 if prob < self.exit_threshold:
-                    print(f"[-] LIQUIDATING {symbol} | Prob: {prob:.2f} < {self.exit_threshold}")
+                    logger.info(f"[-] LIQUIDATING {symbol} | Prob: {prob:.2f} < {self.exit_threshold}")
+                    
+                    # Calculate PnL if entry price exists in DB
+                    entry_price = db_manager.get_last_buy_price(symbol)
+                    pnl_pct = 0.0
+                    pnl_raw = 0.0
+                    if entry_price:
+                        pnl_pct = ((current_price - entry_price) / entry_price) * 100
+                        pnl_raw = (current_price - entry_price) * amount
+                        logger.info(f"    -> Profit/Loss: {pnl_pct:+.2f}% | ${pnl_raw:+.2f}")
+                    
+                    status = "SUCCESS"
                     if not self.paper_trade:
                         try:
-                            # Send market sell for the entire balance
                             order = self.exchange.create_market_sell_order(symbol, amount)
-                            print(f"    -> Sold {amount} of {symbol}")
+                            logger.info(f"    -> Sold {amount} of {symbol}")
                         except Exception as e:
-                            print(f"    -> [!] Sell Failed: {e}")
+                            status = "FAILED"
+                            logger.error(f"    -> [!] Sell Failed: {e}")
+                    
+                    if status == "SUCCESS":
+                        db_manager.record_trade(symbol, "SELL", amount, current_price, prob, pnl_pct, pnl_raw)
             else:
-                # If an asset isn't in our active tracking, we might want to sell it,
-                # but for safety, we just leave it alone here.
+                # Not in active tracking
                 pass
 
         # Refresh free quote after sells
         if not self.paper_trade:
-            # small delay to let Binance update balances
-            import time
-            time.sleep(1)
+            time.sleep(1) # Delay for balance update
             _, free_quote, holdings = self.get_portfolio_value()
             
         # =====================================================================
         # STEP 2: ALLOCATE (BUY)
         # =====================================================================
         for symbol in approved_assets_ordered:
-            # We only buy if it scored > entry_threshold
             if symbol in pred_map:
                 prob = pred_map[symbol]['rally_prob']
+                price = pred_map[symbol]['last_close']
                 
                 if prob > self.entry_threshold:
-                    # Check if we already hold it
+                    # Check if already held
                     if symbol in holdings:
-                        print(f"[~] Skipping {symbol} | Prob {prob:.2f} | Already held.")
+                        logger.info(f"[~] Skipping {symbol} | Prob {prob:.2f} | Already held.")
                         continue
                         
-                    # Check if we have enough cash for a full allocation block
+                    # Check cash
                     if free_quote >= target_trade_quote and target_trade_quote > 10.0:
-                        price = pred_map[symbol]['last_close']
                         amount_to_buy = target_trade_quote / price
                         
-                        print(f"[+] BUYING {symbol} | Prob: {prob:.2f} > {self.entry_threshold}")
-                        print(f"    -> Size: ${target_trade_quote:.2f} ({amount_to_buy:.6f} units)")
+                        logger.info(f"[+] BUYING {symbol} | Prob: {prob:.2f} > {self.entry_threshold}")
+                        logger.info(f"    -> Size: ${target_trade_quote:.2f} ({amount_to_buy:.6f} units)")
                         
+                        status = "SUCCESS"
                         if not self.paper_trade:
                             try:
                                 order = self.exchange.create_market_buy_order(symbol, amount_to_buy)
-                                print("    -> Order Success")
+                                logger.info("    -> Order Success")
                             except Exception as e:
-                                print(f"    -> [!] Buy Failed: {e}")
+                                status = "FAILED"
+                                logger.error(f"    -> [!] Buy Failed: {e}")
                                 
-                        # Deduct from local tracker so we don't overdraft (works for both live and paper)
-                        free_quote -= target_trade_quote
-                        # Mark as held locally to ensure diversification in the same cycle
-                        holdings[symbol] = amount_to_buy
-                        
+                        if status == "SUCCESS":
+                            db_manager.record_trade(symbol, "BUY", amount_to_buy, price, prob)
+                            free_quote -= target_trade_quote
+                            holdings[symbol] = amount_to_buy
                     else:
-                        print(f"[!] Insufficient {self.quote_currency} to buy {symbol} (Need ${target_trade_quote:.2f}, Have ${free_quote:.2f})")
+                        logger.warning(f"[!] Insufficient {self.quote_currency} to buy {symbol} (Need ${target_trade_quote:.2f}, Have ${free_quote:.2f})")
                         
-        print("-" * 40)
+        logger.info("-" * 40)
 
 if __name__ == "__main__":
-    print("Testing Binance API Connection...")
+    logger.info("Testing Binance API Connection...")
     trader = BinanceTrader(paper_trade=False)
     total, free, holdings = trader.get_portfolio_value()
-    print(f"Total Portfolio: ${total:.2f}")
-    print(f"Free USDC: ${free:.2f}")
-    print("Current Holdings:", holdings)
+    logger.info(f"Total Portfolio: ${total:.2f}")
+    logger.info(f"Free USDC: ${free:.2f}")
+    logger.info(f"Current Holdings: {holdings}")

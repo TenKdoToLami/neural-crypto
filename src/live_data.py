@@ -3,6 +3,7 @@ import ccxt
 import pandas as pd
 import time
 from datetime import datetime, timedelta
+from src.utils.logger import logger
 
 class LiveDataFetcher:
     def __init__(self, exchange_id='binance', limit=20, timeframe='15m'):
@@ -45,7 +46,7 @@ class LiveDataFetcher:
     def fetch_latest(self):
         """Fetch the latest candles for tracked assets, minimizing bandwidth."""
         assets = self.get_approved_assets()
-        print(f"[Live Data] Tracking {len(assets)} manually approved assets.")
+        logger.info(f"[Live Data] Tracking {len(assets)} manually approved assets.")
         updated_data = {}
         
         for symbol in assets:
@@ -89,7 +90,7 @@ class LiveDataFetcher:
                 updated_data[symbol] = pd.read_csv(filename)
                 
             except Exception as e:
-                print(f"[!] Error fetching live data for {symbol}: {e}")
+                logger.error(f"[!] Error fetching live data for {symbol}: {e}")
                 
             time.sleep(self.exchange.rateLimit / 1000)
             
@@ -98,4 +99,4 @@ class LiveDataFetcher:
 if __name__ == "__main__":
     fetcher = LiveDataFetcher()
     data = fetcher.fetch_latest()
-    print(f"Fetched live data for {len(data)} assets.")
+    logger.info(f"Fetched live data for {len(data)} assets.")

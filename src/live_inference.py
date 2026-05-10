@@ -4,6 +4,7 @@ import pandas as pd
 import os
 from src.data.processor import DataProcessor
 from src.models.classifier import NeuralSentinelV1
+from src.utils.logger import logger
 
 class LiveInferenceEngine:
     def __init__(self, model_path='models/best_model.pth', device=None):
@@ -14,8 +15,7 @@ class LiveInferenceEngine:
         self.model.eval()
         
         if os.path.exists(model_path):
-            print(f"[Inference] Loading model weights from {model_path}...")
-            # Handling both full model and state_dict depending on how it was saved
+            logger.info(f"[Inference] Loading model weights from {model_path}...")
             try:
                 state_dict = torch.load(model_path, map_location=self.device)
                 if isinstance(state_dict, NeuralSentinelV1):
@@ -23,9 +23,9 @@ class LiveInferenceEngine:
                 else:
                     self.model.load_state_dict(state_dict)
             except Exception as e:
-                print(f"[!] Warning: Could not load model properly: {e}")
+                logger.error(f"[!] Warning: Could not load model properly: {e}")
         else:
-            print(f"[!] Warning: Model path {model_path} not found. Running with uninitialized weights.")
+            logger.warning(f"[!] Warning: Model path {model_path} not found. Running with uninitialized weights.")
             
     def process_and_predict(self, data_dict):
         """
@@ -36,7 +36,7 @@ class LiveInferenceEngine:
         
         for symbol, df in data_dict.items():
             if len(df) < self.processor.lookback:
-                print(f"[Inference] Not enough data for {symbol}. Needs {self.processor.lookback}, got {len(df)}")
+                logger.warning(f"[Inference] Not enough data for {symbol}. Needs {self.processor.lookback}, got {len(df)}")
                 continue
                 
             try:
@@ -63,7 +63,6 @@ class LiveInferenceEngine:
                 
                 # Inference
                 with torch.no_grad():
-                    # We might use mixed precision for speed if needed
                     with torch.cuda.amp.autocast(enabled=(self.device.type == 'cuda')):
                         rally_logits, vol_est = self.model(x_tensor)
                         
@@ -80,7 +79,7 @@ class LiveInferenceEngine:
                 })
                 
             except Exception as e:
-                print(f"[!] Inference error for {symbol}: {e}")
+                logger.error(f"[!] Inference error for {symbol}: {e}")
                 
         # Sort predictions by probability (highest first)
         df_preds = pd.DataFrame(predictions)
@@ -97,5 +96,4 @@ if __name__ == "__main__":
     engine = LiveInferenceEngine()
     preds = engine.process_and_predict(data)
     
-    print("\n[Live Predictions]")
-    print(preds.to_string())
+    logger.info("\n[Live Predictions]\n" + preds.to_string())
