@@ -86,7 +86,7 @@ def train():
     print(f"Training on: {device}")
     
     # 1. Hyperparameters
-    BATCH_SIZE = 1024 
+    BATCH_SIZE = 2048 
     LEARNING_RATE = 2e-4
     EPOCHS = 10 
     
@@ -101,8 +101,8 @@ def train():
     val_size = len(dataset) - train_size
     train_ds, val_ds = torch.utils.data.random_split(dataset, [train_size, val_size])
     
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, pin_memory=True)
-    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, pin_memory=True, num_workers=8)
+    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
     
     # 3. Model & Optimizer
     model = NeuralSentinelV1(input_dim=8).to(device)
