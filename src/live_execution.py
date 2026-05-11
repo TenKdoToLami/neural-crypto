@@ -292,6 +292,37 @@ class BinanceTrader:
                     else:
                         logger.warning(f"[!] Insufficient {self.quote_currency} to buy {symbol} (Need ${target_trade_quote:.2f}, Have ${free_quote:.2f})")
                         
+        # =====================================================================
+        # STEP 3: LOG RUN HISTORY (Sliding 7-day Window)
+        # =====================================================================
+        try:
+            # 1. Format Predictions
+            clean_preds = []
+            for _, row in preds_df.iterrows():
+                clean_preds.append({
+                    "symbol": row['symbol'],
+                    "prob": round(float(row['rally_prob']), 4),
+                    "price": round(float(row['last_close']), 4)
+                })
+            
+            # 2. Format Portfolio (Percentage based)
+            portfolio_snapshot = {
+                "total_value": round(total_value, 2),
+                "cash_pct": round((free_quote / total_value) * 100, 2),
+                "holdings": []
+            }
+            for sym, info in holdings.items():
+                portfolio_snapshot["holdings"].append({
+                    "symbol": sym,
+                    "pct": round(info['pct'], 2),
+                    "pnl_pct": round(((info['price'] - db_manager.get_last_buy_price(sym)) / db_manager.get_last_buy_price(sym)) * 100, 2) if db_manager.get_last_buy_price(sym) else 0.0
+                })
+            
+            db_manager.save_run_history(clean_preds, portfolio_snapshot)
+            logger.info("[Trader] Run history saved to SQL (7-day sliding window).")
+        except Exception as e:
+            logger.error(f"[Trader] Failed to save run history: {e}")
+
         logger.info("-" * 40)
 
 if __name__ == "__main__":

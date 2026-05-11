@@ -38,6 +38,16 @@ class DatabaseManager:
                     pnl_raw REAL
                 )
             ''')
+            
+            # Table for high-detail run history (Sliding 7-day window)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS run_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    predictions_json TEXT NOT NULL,
+                    portfolio_json TEXT NOT NULL
+                )
+            ''')
             conn.commit()
 
     def save_portfolio_snapshot(self, total_value, free_cash):
@@ -83,6 +93,29 @@ class DatabaseManager:
                 pnl_pct,
                 pnl_raw
             ))
+            conn.commit()
+
+    def save_run_history(self, predictions_list, portfolio_data):
+        """Saves detailed run data and prunes history older than 7 days."""
+        now = datetime.utcnow()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # 1. Insert new run data
+            cursor.execute('''
+                INSERT INTO run_history (timestamp, predictions_json, portfolio_json)
+                VALUES (?, ?, ?)
+            ''', (
+                now.strftime('%Y-%m-%d %H:%M:%S'),
+                json.dumps(predictions_list),
+                json.dumps(portfolio_data)
+            ))
+            
+            # 2. Prune data older than 7 days
+            cursor.execute('''
+                DELETE FROM run_history 
+                WHERE timestamp < datetime('now', '-7 days')
+            ''')
             conn.commit()
 
 # Singleton instance
