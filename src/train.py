@@ -89,6 +89,7 @@ def train():
     BATCH_SIZE = 2048 
     LEARNING_RATE = 2e-4
     EPOCHS = 10 
+    best_val_loss = float('inf')
     
     # 2. Load Dataset
     dataset = SmartRAMDataset()
@@ -131,16 +132,35 @@ def train():
             total_loss += loss.item()
             pbar.set_postfix({'loss': f"{loss.item():.4f}"})
             
-        print(f"Epoch {epoch+1} summary: Avg Loss: {total_loss/len(train_loader):.4f}")
+        avg_train_loss = total_loss / len(train_loader)
         
-        # Save timestamped model
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
-        model_name = f"sentinel_{timestamp}.pth"
+        # 4. Validation Pass
+        model.eval()
+        val_loss = 0
+        with torch.no_grad():
+            for batch_x, batch_y in val_loader:
+                batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+                with torch.amp.autocast('cuda', dtype=torch.bfloat16):
+                    logits, _ = model(batch_x)
+                    loss = criterion(logits, batch_y)
+                val_loss += loss.item()
+        
+        avg_val_loss = val_loss / len(val_loader)
+        
+        print(f"Epoch {epoch+1} summary: Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+        
+        # 5. Save Logic
+        timestamp = datetime.now().strftime("%Y:%m:%d_%H:%M")
+        model_name = f"{timestamp}_sentinel_E{epoch+1}_L{avg_val_loss:.4f}.pth"
         torch.save(model.state_dict(), os.path.join('models', model_name))
         
-        # Update best_model.pth
-        torch.save(model.state_dict(), f"models/best_model.pth")
-        print(f"[*] Model saved as {model_name} and best_model.pth")
+        # Only update best_model.pth if validation loss improved
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            torch.save(model.state_dict(), 'models/best_model.pth')
+            print(f"🏆 New Best Model! Val Loss: {avg_val_loss:.4f}")
+        else:
+            print(f"[*] Model saved as {model_name}")
 
 if __name__ == "__main__":
     os.makedirs('models', exist_ok=True)

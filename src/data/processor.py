@@ -75,6 +75,10 @@ class DataProcessor:
         rolling_std = rolling_std.replace(0, 1e-9)
         
         data_df = (df[features] - rolling_mean) / rolling_std
+        
+        # FINAL SAFETY: Fill any NaNs that slipped through (e.g. at the start of the window)
+        data_df = data_df.ffill().bfill().fillna(0)
+        
         data = data_df.values
         
         if 'target' in df.columns:
