@@ -40,38 +40,64 @@ class BinanceTrader:
             logger.error(f"[Trader] Could not load markets: {e}")
 
     def get_portfolio_value(self):
-        """Returns total portfolio value in USDT and a dict of current holdings."""
+        """Returns total portfolio value in USDC and a dict of current holdings."""
         if self.paper_trade:
             # Mock portfolio for paper trading
             return 1000.0, 1000.0, {}
             
         try:
             balance = self.exchange.fetch_balance()
-            free_quote = balance.get(self.quote_currency, {}).get('free', 0.0)
             
+            # Aggregate balances to handle Binance Earn (LD prefix for lending assets)
+            total_balances = {}
+            for raw_currency, amt in balance['total'].items():
+                if amt <= 0:
+                    continue
+                
+                currency = raw_currency
+                # Strip LD prefix if it's a lending asset and we have a corresponding market or it's the quote
+                if raw_currency.startswith('LD') and len(raw_currency) > 2:
+                    potential = raw_currency[2:]
+                    # Check if potential currency exists in markets or is the quote currency
+                    if any(f"{potential}/" in m for m in self.exchange.markets) or potential == self.quote_currency:
+                        currency = potential
+                
+                total_balances[currency] = total_balances.get(currency, 0.0) + amt
+            
+            free_quote = total_balances.get(self.quote_currency, 0.0)
+            
+            # Log if significant funds are in Earn
+            ld_quote_sym = f"LD{self.quote_currency}"
+            if ld_quote_sym in balance.get('total', {}):
+                ld_amt = balance['total'][ld_quote_sym]
+                if ld_amt > 1.0:
+                    logger.info(f"[Trader] Note: Found ${ld_amt:.2f} in {ld_quote_sym} (Earn). Aggregated into total {self.quote_currency}.")
+
             holdings = {}
             total_crypto_value = 0.0
             
             # Find all held assets with non-zero balance
-            for currency, amt in balance['total'].items():
-                if amt > 0 and currency != self.quote_currency:
-                    # Map back to the symbol used by the inference engine (USDT)
-                    symbol_quote = f"{currency}/{self.quote_currency}"
+            for currency, amt in total_balances.items():
+                if currency == self.quote_currency:
+                    continue
                     
-                    # Estimate value using current ticker (we use USDC ticker for real value)
-                    if symbol_quote in self.exchange.markets:
-                        ticker = self.exchange.fetch_ticker(symbol_quote)
-                        current_price = ticker['last']
-                        value_quote = amt * current_price
-                        
-                        # Only track it if value is > $2 (ignores tiny dust)
-                        if value_quote > 2.0:
-                            holdings[symbol_quote] = {
-                                'amount': amt,
-                                'value': value_quote,
-                                'price': current_price
-                            }
-                            total_crypto_value += value_quote
+                # Map back to the symbol used by the inference engine
+                symbol_quote = f"{currency}/{self.quote_currency}"
+                
+                # Estimate value using current ticker
+                if symbol_quote in self.exchange.markets:
+                    ticker = self.exchange.fetch_ticker(symbol_quote)
+                    current_price = ticker['last']
+                    value_quote = amt * current_price
+                    
+                    # Only track it if value is > $2 (ignores tiny dust)
+                    if value_quote > 2.0:
+                        holdings[symbol_quote] = {
+                            'amount': amt,
+                            'value': value_quote,
+                            'price': current_price
+                        }
+                        total_crypto_value += value_quote
                             
             total_portfolio = free_quote + total_crypto_value
             
