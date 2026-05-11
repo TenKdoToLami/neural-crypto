@@ -105,11 +105,42 @@ class BinanceTrader:
             for sym in holdings:
                 holdings[sym]['pct'] = (holdings[sym]['value'] / total_portfolio) * 100
                 
-            return total_portfolio, free_quote, holdings
+            return total_portfolio, free_quote, holdings, balance
             
         except Exception as e:
             logger.error(f"[Trader] Error fetching portfolio: {e}")
-            return 0.0, 0.0, {}
+            return 0.0, 0.0, {}, {}
+
+    def redeem_from_earn(self, asset, amount):
+        """Redeems asset from Binance Flexible Earn to Spot wallet."""
+        if self.paper_trade:
+            return True
+            
+        try:
+            # First find the productId for this flexible earn product
+            products = self.exchange.sapiGetSimpleEarnFlexibleList({'asset': asset})
+            product_id = None
+            for row in products.get('rows', []):
+                if row['asset'] == asset:
+                    product_id = row['productId']
+                    break
+            
+            if not product_id:
+                logger.error(f"[Trader] Could not find Product ID for {asset} in Simple Earn.")
+                return False
+
+            logger.info(f"[Trader] Attempting to redeem {amount:.8f} {asset} from Earn (ID: {product_id})...")
+            self.exchange.sapiPostSimpleEarnFlexibleRedeem({
+                'productId': product_id,
+                'amount': amount,
+                'type': 'FAST'
+            })
+            # Wait a bit for balance to update
+            time.sleep(2)
+            return True
+        except Exception as e:
+            logger.error(f"[Trader] [!] Redemption Failed: {e}")
+            return False
 
     def execute_trades(self, preds_df, approved_assets_ordered):
         """
@@ -124,7 +155,7 @@ class BinanceTrader:
         logger.info("-" * 40)
         logger.info(" PORTFOLIO EXECUTION ".center(40, "-"))
         
-        total_value, free_quote, holdings = self.get_portfolio_value()
+        total_value, free_quote, holdings, raw_balance = self.get_portfolio_value()
         logger.info(f"[Trader] Total Portfolio: ${total_value:.2f} | Free {self.quote_currency}: ${free_quote:.2f}")
         
         if holdings:
@@ -183,6 +214,19 @@ class BinanceTrader:
                     status = "SUCCESS"
                     if not self.paper_trade:
                         try:
+                            # Ensure funds are in Spot wallet
+                            base_asset = symbol.split('/')[0]
+                            spot_amt = raw_balance.get(base_asset, {}).get('free', 0.0)
+                            if spot_amt < amount:
+                                needed = amount - spot_amt
+                                ld_asset = f"LD{base_asset}"
+                                earn_amt = raw_balance.get(ld_asset, {}).get('free', 0.0)
+                                if earn_amt >= needed:
+                                    self.redeem_from_earn(base_asset, needed)
+                                elif earn_amt > 0:
+                                    # Redeem whatever is available
+                                    self.redeem_from_earn(base_asset, earn_amt)
+                            
                             order = self.exchange.create_market_sell_order(symbol, amount)
                             logger.info(f"    -> Sold {amount} of {symbol}")
                         except Exception as e:
@@ -198,7 +242,7 @@ class BinanceTrader:
         # Refresh free quote after sells
         if not self.paper_trade:
             time.sleep(1) # Delay for balance update
-            _, free_quote, holdings = self.get_portfolio_value()
+            _, free_quote, holdings, raw_balance = self.get_portfolio_value()
             
         # =====================================================================
         # STEP 2: ALLOCATE (BUY)
@@ -224,6 +268,17 @@ class BinanceTrader:
                         status = "SUCCESS"
                         if not self.paper_trade:
                             try:
+                                # Ensure USDC is in Spot wallet
+                                spot_quote = raw_balance.get(self.quote_currency, {}).get('free', 0.0)
+                                if spot_quote < target_trade_quote:
+                                    needed = target_trade_quote - spot_quote
+                                    ld_quote = f"LD{self.quote_currency}"
+                                    earn_quote = raw_balance.get(ld_quote, {}).get('free', 0.0)
+                                    if earn_quote >= needed:
+                                        self.redeem_from_earn(self.quote_currency, needed)
+                                    elif earn_quote > 0:
+                                        self.redeem_from_earn(self.quote_currency, earn_quote)
+                                
                                 order = self.exchange.create_market_buy_order(symbol, amount_to_buy)
                                 logger.info("    -> Order Success")
                             except Exception as e:
@@ -242,7 +297,7 @@ class BinanceTrader:
 if __name__ == "__main__":
     logger.info("Testing Binance API Connection...")
     trader = BinanceTrader(paper_trade=False)
-    total, free, holdings = trader.get_portfolio_value()
+    total, free, holdings, _ = trader.get_portfolio_value()
     logger.info(f"Total Portfolio: ${total:.2f}")
     logger.info(f"Free USDC: ${free:.2f}")
     logger.info(f"Current Holdings: {holdings}")

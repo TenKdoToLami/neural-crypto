@@ -39,7 +39,7 @@ dist/
 # Environment Variables
 .env
 
-
+scratch/*
 
 *.log
 *.db
