@@ -1,35 +1,36 @@
-# Data (Ignore massive CSVs and DBs, but keep configs)
-/data/raw/
+# Data (Ignore massive CSVs and binary tensors)
+data/raw/
 data/raw_live/
 data/processed/
 data/processed_flat/
 data/bear_market/
-/data/raw_live/
-/data/processed/
-/*.db
+data/evaluation/
+*.db
 
 # Allow tracking for our approved asset lists and blacklists
-!/data/*.txt
+!data/*.txt
 
-# Models (Ignore large weights, keep the folder structure)
-/models/*.pth
+# Models (Ignore large weights)
+models/*.pth
 
 # Reports & Logs
-/reports/
-/logs/
-/outputs/
+reports/
+logs/
+outputs/
+*.log
 
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
 .Python
 env/
 venv/
 build/
 dist/
 *.egg-info/
+
+# Streamlit
+.streamlit/
 
 # IDEs
 .vscode/
@@ -39,7 +40,5 @@ dist/
 # Environment Variables
 .env
 
-scratch/*
-
-*.log
-*.db
+# Scratch
+scratch/

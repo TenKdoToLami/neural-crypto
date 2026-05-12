@@ -81,14 +81,17 @@ class SmartRAMDataset(Dataset):
         
         return window, label
 
-def train():
+def train(hidden_dim=256):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Training on: {device}")
+    print(f"\n" + "="*50)
+    print(f"🧬 EXPERIMENT: {hidden_dim} NEURONS")
+    print(f"🧬 Training on: {device}")
+    print("="*50 + "\n")
     
     # 1. Hyperparameters
     BATCH_SIZE = 2048 
     LEARNING_RATE = 2e-4
-    EPOCHS = 10 
+    EPOCHS = 20 
     best_val_loss = float('inf')
     
     # 2. Load Dataset
@@ -106,7 +109,7 @@ def train():
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
     
     # 3. Model & Optimizer
-    model = NeuralSentinelV1(input_dim=8).to(device)
+    model = NeuralSentinelV1(input_dim=8, hidden_dim=hidden_dim).to(device)
     optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-2)
     criterion = nn.BCEWithLogitsLoss()
     scaler = torch.amp.GradScaler('cuda')
@@ -115,7 +118,7 @@ def train():
     for epoch in range(EPOCHS):
         model.train()
         total_loss = 0
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS}")
+        pbar = tqdm(train_loader, desc=f"[{hidden_dim}N] Epoch {epoch+1}/{EPOCHS}")
         
         for batch_x, batch_y in pbar:
             batch_x, batch_y = batch_x.to(device), batch_y.to(device)
@@ -147,21 +150,31 @@ def train():
         
         avg_val_loss = val_loss / len(val_loader)
         
-        print(f"Epoch {epoch+1} summary: Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+        print(f"[{hidden_dim}N] Epoch {epoch+1}: Train {avg_train_loss:.4f} | Val {avg_val_loss:.4f}")
         
         # 5. Save Logic
-        timestamp = datetime.now().strftime("%Y:%m:%d_%H:%M")
-        model_name = f"{timestamp}_sentinel_E{epoch+1}_L{avg_val_loss:.4f}.pth"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        model_name = f"{hidden_dim}N_{timestamp}_sentinel_E{epoch+1}_L{avg_val_loss:.4f}.pth"
         torch.save(model.state_dict(), os.path.join('models', model_name))
         
         # Only update best_model.pth if validation loss improved
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            torch.save(model.state_dict(), 'models/best_model.pth')
-            print(f"🏆 New Best Model! Val Loss: {avg_val_loss:.4f}")
-        else:
-            print(f"[*] Model saved as {model_name}")
+            torch.save(model.state_dict(), f'models/best_{hidden_dim}N_model.pth')
+            print(f"🏆 New Best {hidden_dim}N Model! Val Loss: {avg_val_loss:.4f}")
+
+    # Cleanup memory
+    del model
+    del optimizer
+    torch.cuda.empty_cache()
 
 if __name__ == "__main__":
     os.makedirs('models', exist_ok=True)
-    train()
+    
+    # Run Experiment Suite
+    EXPERIMENT_NEURONS = [16, 32, 64, 128]
+    
+    for n in EXPERIMENT_NEURONS:
+        train(hidden_dim=n)
+        
+    print("\n✅ All experiments complete! Check the 'models' folder for results.")
