@@ -86,67 +86,73 @@ def train_elastic():
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=8, pin_memory=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=8, pin_memory=True)
     
-    model = NeuralSentinelV1(input_dim=8).to(device)
-    criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
+    # We focus on 32 neurons for the elastic experiment as it was our champion
+    hidden_dims = [32]
     
-    for epoch in range(EPOCHS):
-        model.train()
-        total_loss = 0
-        total_l1_penalty = 0
+    for hidden_dim in hidden_dims:
+        print(f"\n{'='*50}")
+        print(f"🚀 STARTING ELASTIC EXPERIMENT: {hidden_dim} Neurons")
+        print(f"{'='*50}")
         
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS}")
-        for batch_x, batch_y in pbar:
-            batch_x, batch_y = batch_x.to(device), batch_y.to(device)
-            
-            optimizer.zero_grad()
-            with torch.amp.autocast('cuda', dtype=torch.bfloat16):
-                logits, _ = model(batch_x)
-                
-                # 1. Standard Prediction Loss
-                base_loss = criterion(logits, batch_y)
-                
-                # 2. ELASTIC REWARD (L1 Regularization)
-                # We calculate the absolute sum of all weights
-                l1_penalty = 0
-                for param in model.parameters():
-                    l1_penalty += torch.norm(param, 1)
-                
-                # Final Loss = Accuracy + Tax for being big
-                loss = base_loss + (L1_LAMBDA * l1_penalty)
-                
-            loss.backward()
-            optimizer.step()
-            
-            total_loss += loss.item()
-            total_l1_penalty += l1_penalty.item()
-            pbar.set_postfix({'loss': f"{loss.item():.4f}", 'tax': f"{l1_penalty.item():.1f}"})
-            
-        avg_train_loss = total_loss / len(train_loader)
+        model = NeuralSentinelV1(hidden_dim=hidden_dim).to(device)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=0.01)
+        criterion = nn.BCEWithLogitsLoss()
         
-        # Validation Pass
-        model.eval()
-        val_loss = 0
-        with torch.no_grad():
-            for batch_x, batch_y in val_loader:
-                batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+        best_val_loss = float('inf')
+        
+        # Add scaler for amp
+        scaler = torch.amp.GradScaler('cuda')
+        
+        for epoch in range(EPOCHS):
+            model.train()
+            train_losses = []
+            
+            for batch_idx, (data, target) in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS}")):
+                data, target = data.to(device), target.to(device).float().unsqueeze(1)
+                
+                optimizer.zero_grad()
                 with torch.amp.autocast('cuda', dtype=torch.bfloat16):
-                    logits, _ = model(batch_x)
-                    loss = criterion(logits, batch_y)
-                val_loss += loss.item()
-        
-        avg_val_loss = val_loss / len(val_loader)
-        print(f"Epoch {epoch+1} summary: Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | Tax Paid: {total_l1_penalty/len(train_loader):.1f}")
-        
-        # Save Logic
-        timestamp = datetime.now().strftime("%Y:%m:%d_%H:%M")
-        model_name = f"{timestamp}_sentinel_ELASTIC_E{epoch+1}_L{avg_val_loss:.4f}.pth"
-        torch.save(model.state_dict(), os.path.join('models', model_name))
-        
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
-            torch.save(model.state_dict(), 'models/best_elastic_model.pth')
-            print(f"🏆 New Best Elastic Model! Val Loss: {avg_val_loss:.4f}")
+                    logits, _ = model(data)
+                    bce_loss = criterion(logits, target)
+                    
+                    # --- ELASTIC PENALTY (L1) ---
+                    l1_penalty = 0
+                    for param in model.parameters():
+                        l1_penalty += torch.norm(param, 1)
+                    
+                    loss = bce_loss + (L1_LAMBDA * l1_penalty)
+                
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+                
+                train_losses.append(bce_loss.item())
+            
+            avg_train_loss = sum(train_losses) / len(train_losses)
+            
+            # Validation
+            model.eval()
+            val_losses = []
+            with torch.no_grad():
+                for data, target in val_loader:
+                    data, target = data.to(device), target.to(device).float().unsqueeze(1)
+                    with torch.amp.autocast('cuda', dtype=torch.bfloat16):
+                        logits, _ = model(data)
+                        v_loss = criterion(logits, target)
+                        val_losses.append(v_loss.item())
+            
+            avg_val_loss = sum(val_losses) / len(val_losses)
+            print(f"Epoch {epoch+1}: Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+            
+            # Save checkpoin with specific naming
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+            save_path = f'models/{hidden_dim}N_{timestamp}_sentinel_ELASTIC_E{epoch+1}_L{avg_val_loss:.4f}.pth'
+            torch.save(model.state_dict(), save_path)
+            
+            if avg_val_loss < best_val_loss:
+                best_val_loss = avg_val_loss
+                torch.save(model.state_dict(), f'models/best_{hidden_dim}N_elastic_model.pth')
+                print(f"🏆 New Best Elastic Model! Val Loss: {avg_val_loss:.4f}")
 
 if __name__ == "__main__":
     import pandas as pd
