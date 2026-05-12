@@ -21,7 +21,7 @@ def run_loop():
     
     # Initialize engines
     fetcher = LiveDataFetcher()
-    engine = LiveInferenceEngine()
+    engine = LiveInferenceEngine(hidden_dim=16)
     
     logger.info(f"Executing run at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}...")
     

@@ -91,7 +91,9 @@ def train(hidden_dim=256):
     # 1. Hyperparameters
     BATCH_SIZE = 2048 
     LEARNING_RATE = 2e-4
-    EPOCHS = 20 
+    EPOCHS = 50 
+    SUBSAMPLE_PCT = 0.25 # Only see 25% of data per epoch to prevent memorization
+    NOISE_LEVEL = 0.01   # Add 1% jitter to prevent exact pattern matching
     best_val_loss = float('inf')
     
     # 2. Load Dataset
@@ -114,15 +116,26 @@ def train(hidden_dim=256):
     criterion = nn.BCEWithLogitsLoss()
     scaler = torch.amp.GradScaler('cuda')
     
-    print(f"Starting High-Performance training...")
+    print(f"Starting Robust training (Subsampling: {SUBSAMPLE_PCT:.0%}, Noise: {NOISE_LEVEL})...")
     for epoch in range(EPOCHS):
         model.train()
         total_loss = 0
-        pbar = tqdm(train_loader, desc=f"[{hidden_dim}N] Epoch {epoch+1}/{EPOCHS}")
+        
+        # --- SUBSAMPLING: Create a random subset for this epoch ---
+        indices = torch.randperm(len(train_ds))[:int(len(train_ds) * SUBSAMPLE_PCT)]
+        epoch_ds = torch.utils.data.Subset(train_ds, indices)
+        epoch_loader = DataLoader(epoch_ds, batch_size=BATCH_SIZE, shuffle=True, pin_memory=True, num_workers=8)
+        
+        pbar = tqdm(epoch_loader, desc=f"[{hidden_dim}N] Epoch {epoch+1}/{EPOCHS}")
         
         for batch_x, batch_y in pbar:
             batch_x, batch_y = batch_x.to(device), batch_y.to(device)
             
+            # --- GAUSSIAN NOISE: Add jitter to inputs ---
+            if model.training:
+                noise = torch.randn_like(batch_x) * NOISE_LEVEL
+                batch_x = batch_x + noise
+                
             optimizer.zero_grad(set_to_none=True)
             with torch.amp.autocast('cuda', dtype=torch.bfloat16):
                 logits, _ = model(batch_x)
@@ -135,7 +148,7 @@ def train(hidden_dim=256):
             total_loss += loss.item()
             pbar.set_postfix({'loss': f"{loss.item():.4f}"})
             
-        avg_train_loss = total_loss / len(train_loader)
+        avg_train_loss = total_loss / len(epoch_loader)
         
         # 4. Validation Pass
         model.eval()
@@ -154,14 +167,14 @@ def train(hidden_dim=256):
         
         # 5. Save Logic
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-        model_name = f"{hidden_dim}N_{timestamp}_sentinel_E{epoch+1}_L{avg_val_loss:.4f}.pth"
+        model_name = f"{hidden_dim}N_{timestamp}_RobustMind_E{epoch+1}_L{avg_val_loss:.4f}.pth"
         torch.save(model.state_dict(), os.path.join('models', model_name))
         
         # Only update best_model.pth if validation loss improved
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            torch.save(model.state_dict(), f'models/best_{hidden_dim}N_model.pth')
-            print(f"🏆 New Best {hidden_dim}N Model! Val Loss: {avg_val_loss:.4f}")
+            torch.save(model.state_dict(), f'models/best_{hidden_dim}N_robust_model.pth')
+            print(f"🏆 New Best {hidden_dim}N RobustMind! Val Loss: {avg_val_loss:.4f}")
 
     # Cleanup memory
     del model
@@ -172,7 +185,7 @@ if __name__ == "__main__":
     os.makedirs('models', exist_ok=True)
     
     # Run Experiment Suite
-    EXPERIMENT_NEURONS = [16, 32, 64, 128]
+    EXPERIMENT_NEURONS = [16, 32, 64]
     
     for n in EXPERIMENT_NEURONS:
         train(hidden_dim=n)

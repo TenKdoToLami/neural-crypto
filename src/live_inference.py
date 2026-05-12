@@ -7,11 +7,11 @@ from src.models.classifier import NeuralSentinelV1
 from src.utils.logger import logger
 
 class LiveInferenceEngine:
-    def __init__(self, model_path='models/best_model.pth', device=None):
+    def __init__(self, model_path='models/production_brain.pth', hidden_dim=256, device=None):
         self.device = device if device else torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.processor = DataProcessor(lookback=100, horizon=16)
         
-        self.model = NeuralSentinelV1().to(self.device)
+        self.model = NeuralSentinelV1(hidden_dim=hidden_dim).to(self.device)
         self.model.eval()
         
         if os.path.exists(model_path):

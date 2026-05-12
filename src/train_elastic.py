@@ -107,8 +107,9 @@ def train_elastic():
             model.train()
             train_losses = []
             
-            for batch_idx, (data, target) in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS}")):
-                data, target = data.to(device), target.to(device).float().unsqueeze(1)
+            pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS}")
+            for batch_idx, (data, target) in enumerate(pbar):
+                data, target = data.to(device), target.to(device).float().view(-1, 1)
                 
                 optimizer.zero_grad()
                 with torch.amp.autocast('cuda', dtype=torch.bfloat16):
@@ -127,6 +128,18 @@ def train_elastic():
                 scaler.update()
                 
                 train_losses.append(bce_loss.item())
+                
+                # --- NEURON COUNTING ---
+                # Count how many weights are still "significant" (> 0.01)
+                active_n = 0
+                for param in model.parameters():
+                    active_n += (param.abs() > 0.01).sum().item()
+                
+                pbar.set_postfix({
+                    'loss': f"{bce_loss.item():.4f}", 
+                    'tax': f"{l1_penalty.item():.1f}",
+                    'active': int(active_n)
+                })
             
             avg_train_loss = sum(train_losses) / len(train_losses)
             
@@ -135,14 +148,20 @@ def train_elastic():
             val_losses = []
             with torch.no_grad():
                 for data, target in val_loader:
-                    data, target = data.to(device), target.to(device).float().unsqueeze(1)
+                    data, target = data.to(device), target.to(device).float().view(-1, 1)
                     with torch.amp.autocast('cuda', dtype=torch.bfloat16):
                         logits, _ = model(data)
                         v_loss = criterion(logits, target)
                         val_losses.append(v_loss.item())
             
             avg_val_loss = sum(val_losses) / len(val_losses)
-            print(f"Epoch {epoch+1}: Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+            
+            # Final neuron count for this epoch
+            final_active = 0
+            for param in model.parameters():
+                final_active += (param.abs() > 0.01).sum().item()
+                
+            print(f"Epoch {epoch+1}: Loss: {avg_val_loss:.4f} | Active Weights: {int(final_active)}")
             
             # Save checkpoin with specific naming
             timestamp = datetime.now().strftime("%Y%m%d_%H%M")

@@ -41,29 +41,51 @@ df = load_data()
 if df is None:
     st.error("No data found. Run your evaluation script first!")
 else:
+    # Sidebar Controls
     st.sidebar.header("🕹️ Control Panel")
     neuron_types = sorted(df['neurons'].unique())
     selected_neurons = st.sidebar.multiselect("Brain Size (Neurons)", neuron_types, default=neuron_types)
+    
     years = sorted(df['year'].unique())
     selected_years = st.sidebar.multiselect("Years to Analyze", years, default=years)
+    
+    # NEW: Trade Frequency Filter
+    st.sidebar.subheader("📊 Trade Frequency")
+    min_t, max_t = st.sidebar.slider("Trades per Year Range", 0, 2000, (50, 1000))
+    
     top_n = st.sidebar.slider("Show Top 'N' Models", 3, 20, 10)
     
+    # Apply Basic Filters
     df_filtered = df[df['neurons'].isin(selected_neurons) & df['year'].isin(selected_years)]
     
+    # Aggregate Stats
     leaderboard = df_filtered.groupby(['model', 'neurons']).agg({
         'win_rate': 'mean', 'avg_profit': 'mean', 'trades': 'sum'
     }).reset_index()
     
+    # Calculate Trades Per Year
+    num_years = df_filtered['year'].nunique() if not df_filtered.empty else 1
+    leaderboard['trades_per_year'] = (leaderboard['trades'] / num_years).round(1)
+    
+    # APPLY FREQUENCY FILTER
+    leaderboard = leaderboard[(leaderboard['trades_per_year'] >= min_t) & (leaderboard['trades_per_year'] <= max_t)]
+    
+    if leaderboard.empty:
+        st.warning("No models found matching these filters! Try widening the 'Trades per Year' range.")
+        st.stop()
+
     top_models = leaderboard.sort_values('win_rate', ascending=False).head(top_n)['model'].tolist()
     
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏆 Leaderboard", "📉 Time & Stability", "🧠 Brain Size", "🗃️ Master Explorer", "🔍 Model Deep-Dive"])
 
     with tab1:
-        st.header(f"Top {top_n} Models by Win Rate")
+        st.header(f"Top {top_n} Models ({min_t}-{max_t} trades/yr)")
         display_lb = leaderboard.sort_values('win_rate', ascending=False).head(top_n).copy()
         display_lb['Win Rate %'] = (display_lb['win_rate'] * 100).round(1)
         display_lb['Avg Profit %'] = (display_lb['avg_profit'] * 100).round(2)
-        st.dataframe(display_lb[['model', 'neurons', 'Win Rate %', 'Avg Profit %', 'trades']], use_container_width=True)
+        display_lb['Total Return %'] = (display_lb['avg_profit'] * display_lb['trades'] * 100).round(1)
+        
+        st.dataframe(display_lb[['model', 'neurons', 'Win Rate %', 'Avg Profit %', 'Total Return %', 'trades_per_year']], use_container_width=True)
         
         st.subheader("Profitability Matrix")
         fig = px.scatter(leaderboard, x='win_rate', y='avg_profit', color='neurons', size='trades',
@@ -88,16 +110,21 @@ else:
             'win_rate': 'mean', 'avg_profit': 'mean', 'trades': 'sum'
         }).reset_index()
         
+        # Apply Frequency Filter to Master Table
+        strategy_table['trades_per_year'] = (strategy_table['trades'] / num_years).round(1)
+        strategy_table = strategy_table[(strategy_table['trades_per_year'] >= min_t) & (strategy_table['trades_per_year'] <= max_t)]
+        
         master_table = strategy_table.copy()
         master_table['Win Rate %'] = (master_table['win_rate'] * 100).round(2)
-        master_table['Profit %'] = (master_table['avg_profit'] * 100).round(3)
+        master_table['Avg Profit %'] = (master_table['avg_profit'] * 100).round(3)
+        master_table['Total Return %'] = (master_table['avg_profit'] * master_table['trades'] * 100).round(1)
         
         # FEATURE: Filter for Best Setting per Model
         if st.checkbox("Only show best setting for each model", value=False):
             # Sort by win rate then pick top 1 for each model
             master_table = master_table.sort_values(['model', 'Win Rate %'], ascending=False).groupby('model').head(1)
         
-        st.dataframe(master_table.sort_values(['Win Rate %', 'Profit %'], ascending=False), use_container_width=True, height=600)
+        st.dataframe(master_table.sort_values(['Win Rate %', 'Avg Profit %'], ascending=False), use_container_width=True, height=600)
 
     with tab5:
         st.header("🔍 Individual Model Deep-Dive")

@@ -19,8 +19,8 @@ class BinanceTrader:
         # Configuration
         self.quote_currency = "USDC"
         self.target_allocation = 0.096
-        self.entry_threshold = 0.95
-        self.exit_threshold = 0.35
+        self.entry_threshold = 0.85
+        self.exit_threshold = 0.30
         
         if not self.api_key or not self.secret:
             logger.warning("[Trader] API keys not found in .env. Defaulting to paper trading.")

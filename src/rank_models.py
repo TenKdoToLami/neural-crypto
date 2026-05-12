@@ -97,6 +97,14 @@ def main():
     if rank_df.empty:
         print("No valid models found to rank. Run evaluations first.")
         return
+
+    # --- FREQUENCY FILTER ---
+    # Filter out "Ghost" models (<50) and "High-Fee" models (>1000)
+    rank_df = rank_df[(rank_df['Trades/Year'] >= 50) & (rank_df['Trades/Year'] <= 1000)]
+    
+    if rank_df.empty:
+        print("No models passed the trade frequency filter (50-1000 trades/year).")
+        return
         
     top_10 = rank_df.sort_values('Final_Score', ascending=False).head(15)
     
