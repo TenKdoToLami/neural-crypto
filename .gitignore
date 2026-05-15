@@ -6,6 +6,7 @@ data/processed_flat/
 data/bear_market/
 data/evaluation/
 *.db
+data/processed_v2/
 
 # Allow tracking for our approved asset lists and blacklists
 !data/*.txt

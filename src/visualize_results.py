@@ -33,6 +33,8 @@ def load_data():
             df = pd.read_csv(stats_path)
             df['model'] = m_name
             df['neurons'] = parse_neurons(m_name)
+            # Detect Version
+            df['version'] = 'V2 (VPT+Attention)' if 'V2_' in m_name else 'V1 (Legacy)'
             all_stats.append(df)
     return pd.concat(all_stats) if all_stats else None
 
@@ -41,6 +43,24 @@ df = load_data()
 if df is None:
     st.error("No data found. Run your evaluation script first!")
 else:
+    # --- TOP LEVEL METRICS ---
+    st.subheader("🚀 High-Level Performance Comparison")
+    m_v1 = df[df['version'] == 'V1 (Legacy)']
+    m_v2 = df[df['version'] == 'V2 (VPT+Attention)']
+    
+    col1, col2, col3 = st.columns(3)
+    if not m_v1.empty:
+        best_v1 = m_v1['win_rate'].max()
+        col1.metric("Best V1 Win Rate", f"{best_v1:.1%}", delta=None)
+    if not m_v2.empty:
+        best_v2 = m_v2['win_rate'].max()
+        improvement = (best_v2 - best_v1) if not m_v1.empty else 0
+        col2.metric("Best V2 Win Rate", f"{best_v2:.1%}", delta=f"{improvement:.1%} vs V1", delta_color="normal")
+    
+    total_models = df['model'].nunique()
+    col3.metric("Models Evaluated", total_models)
+    
+    st.markdown("---")
     # Sidebar Controls
     st.sidebar.header("🕹️ Control Panel")
     neuron_types = sorted(df['neurons'].unique())
@@ -58,8 +78,8 @@ else:
     # Apply Basic Filters
     df_filtered = df[df['neurons'].isin(selected_neurons) & df['year'].isin(selected_years)]
     
-    # Aggregate Stats
-    leaderboard = df_filtered.groupby(['model', 'neurons']).agg({
+    # Aggregate Stats (Include Version in Groupby)
+    leaderboard = df_filtered.groupby(['model', 'neurons', 'version']).agg({
         'win_rate': 'mean', 'avg_profit': 'mean', 'trades': 'sum'
     }).reset_index()
     
@@ -87,9 +107,21 @@ else:
         
         st.dataframe(display_lb[['model', 'neurons', 'Win Rate %', 'Avg Profit %', 'Total Return %', 'trades_per_year']], use_container_width=True)
         
-        st.subheader("Profitability Matrix")
-        fig = px.scatter(leaderboard, x='win_rate', y='avg_profit', color='neurons', size='trades',
-                         hover_name='model', color_continuous_scale='Viridis')
+        st.subheader("Profitability Matrix (V1 vs V2)")
+        # We color by Version now to make it more "visible"
+        fig = px.scatter(leaderboard, 
+                         x='win_rate', 
+                         y='avg_profit', 
+                         color='version', 
+                         symbol='version',
+                         size='trades',
+                         hover_name='model', 
+                         color_discrete_map={'V2 (VPT+Attention)': '#00FFCC', 'V1 (Legacy)': '#FF3366'},
+                         template="plotly_dark")
+        
+        # Add a benchmark line for 60% win rate
+        fig.add_vline(x=0.6, line_dash="dash", line_color="gray", annotation_text="Target Accuracy")
+        
         st.plotly_chart(fig, use_container_width=True)
 
     with tab2:
