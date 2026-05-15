@@ -11,7 +11,7 @@ from src.utils.logger import logger
 
 def run_loop():
     logger.info("=" * 60)
-    logger.info(" Neural Sentinel V1 - Live Execution Orchestrator (Cron Mode) ")
+    logger.info(" Neural Sentinel V2 - Live Execution Orchestrator (Cron Mode) ")
     logger.info("=" * 60)
     
     # Sleep briefly to ensure Binance has closed the previous 15m candle
@@ -21,7 +21,7 @@ def run_loop():
     
     # Initialize engines
     fetcher = LiveDataFetcher()
-    engine = LiveInferenceEngine(hidden_dim=16)
+    engine = LiveInferenceEngine(hidden_dim=24)
     
     logger.info(f"Executing run at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}...")
     

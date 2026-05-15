@@ -2,26 +2,23 @@ import torch
 import numpy as np
 import pandas as pd
 import os
-from src.data.processor import DataProcessor
-from src.models.classifier import NeuralSentinelV1
+from src.data.processor_v2 import DataProcessorV2
+from src.models.classifier_v2 import NeuralSentinelV2
 from src.utils.logger import logger
 
 class LiveInferenceEngine:
-    def __init__(self, model_path='models/production_brain.pth', hidden_dim=256, device=None):
+    def __init__(self, model_path='models/production_brain.pth', hidden_dim=24, device=None):
         self.device = device if device else torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.processor = DataProcessor(lookback=100, horizon=16)
+        self.processor = DataProcessorV2(lookback=100, horizon=16)
         
-        self.model = NeuralSentinelV1(hidden_dim=hidden_dim).to(self.device)
+        self.model = NeuralSentinelV2(hidden_dim=hidden_dim).to(self.device)
         self.model.eval()
         
         if os.path.exists(model_path):
             logger.info(f"[Inference] Loading model weights from {model_path}...")
             try:
-                state_dict = torch.load(model_path, map_location=self.device)
-                if isinstance(state_dict, NeuralSentinelV1):
-                    self.model = state_dict
-                else:
-                    self.model.load_state_dict(state_dict)
+                state_dict = torch.load(model_path, map_location=self.device, weights_only=True)
+                self.model.load_state_dict(state_dict)
             except Exception as e:
                 logger.error(f"[!] Warning: Could not load model properly: {e}")
         else:
