@@ -5,7 +5,7 @@ import argparse
 import logging
 
 from src.live_data import LiveDataFetcher
-from src.live_inference import LiveInferenceEngine
+from src.live_inference_gbdt import LiveInferenceEngineGBDT
 from src.live_execution import BinanceTrader
 from src.utils.logger import logger
 
@@ -21,7 +21,7 @@ def run_loop():
     
     # Initialize engines
     fetcher = LiveDataFetcher()
-    engine = LiveInferenceEngine(hidden_dim=24)
+    engine = LiveInferenceEngineGBDT()
     
     logger.info(f"Executing run at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}...")
     

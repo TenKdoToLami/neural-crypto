@@ -13,6 +13,7 @@ data/processed_v2/
 
 # Models (Ignore large weights)
 models/*.pth
+models/*.joblib
 
 # Reports & Logs
 reports/
@@ -26,6 +27,7 @@ __pycache__/
 .Python
 env/
 venv/
+venv_win/
 build/
 dist/
 *.egg-info/

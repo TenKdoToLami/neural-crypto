@@ -19,8 +19,8 @@ class BinanceTrader:
         # Configuration
         self.quote_currency = "USDC"
         self.target_allocation = 0.096
-        self.entry_threshold = 0.95
-        self.exit_threshold = 0.45
+        self.entry_threshold = 0.56
+        self.exit_threshold = 0.44
         
         if not self.api_key or not self.secret:
             logger.warning("[Trader] API keys not found in .env. Defaulting to paper trading.")
@@ -30,6 +30,9 @@ class BinanceTrader:
             'apiKey': self.api_key,
             'secret': self.secret,
             'enableRateLimit': True,
+            'options': {
+                'adjustForTimeDifference': True,
+            }
         })
         
         # Optionally load markets to get precision requirements
@@ -199,6 +202,20 @@ class BinanceTrader:
             current_price = info['price']
             if symbol in pred_map:
                 prob = pred_map[symbol]['rally_prob']
+                
+                # Check Whipsaw Protection (Minimum Hold Time of 8 Hours)
+                last_buy_ts_str = db_manager.get_last_buy_timestamp(symbol)
+                if last_buy_ts_str:
+                    try:
+                        last_buy_ts = datetime.strptime(last_buy_ts_str, '%Y-%m-%d %H:%M:%S')
+                        # SQLite timestamps are UTC, so we compare with datetime.utcnow()
+                        elapsed_hours = (datetime.utcnow() - last_buy_ts).total_seconds() / 3600.0
+                        if elapsed_hours < 8.0:
+                            logger.info(f"[~] Skipping exit check for {symbol} | Held for only {elapsed_hours:.2f} hours (Min hold is 8.0 hours).")
+                            continue
+                    except Exception as ex:
+                        logger.error(f"[Trader] Error checking min-hold elapsed time for {symbol}: {ex}")
+                
                 if prob < self.exit_threshold:
                     logger.info(f"[-] LIQUIDATING {symbol} | Prob: {prob:.2f} < {self.exit_threshold}")
                     

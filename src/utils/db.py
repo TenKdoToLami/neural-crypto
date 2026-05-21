@@ -76,6 +76,18 @@ class DatabaseManager:
             row = cursor.fetchone()
             return row[0] if row else None
 
+    def get_last_buy_timestamp(self, symbol):
+        """Retrieves the timestamp of the most recent BUY action for a symbol."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT timestamp FROM trades 
+                WHERE symbol = ? AND action = 'BUY' 
+                ORDER BY timestamp DESC LIMIT 1
+            ''', (symbol,))
+            row = cursor.fetchone()
+            return row[0] if row else None
+
     def record_trade(self, symbol, action, amount, price, prob, pnl_pct=None, pnl_raw=None):
         """Records a trade action in the database."""
         with sqlite3.connect(self.db_path) as conn:

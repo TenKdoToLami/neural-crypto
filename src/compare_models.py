@@ -28,7 +28,7 @@ def compare_models():
     pivot_df = df.pivot(index='Model', columns='Period', values=['Return %', 'Win Rate %', 'Trades'])
     
     print("\n" + "="*80)
-    print("      🏆 NEURAL SENTINEL MODEL COMPARISON REPORT")
+    print("      NEURAL SENTINEL MODEL COMPARISON REPORT")
     print("="*80)
     
     if pivot_df.empty:
