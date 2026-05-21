@@ -305,7 +305,12 @@ class BinanceTrader:
                         if status == "SUCCESS":
                             db_manager.record_trade(symbol, "BUY", amount_to_buy, price, prob)
                             free_quote -= target_trade_quote
-                            holdings[symbol] = amount_to_buy
+                            holdings[symbol] = {
+                                'amount': amount_to_buy,
+                                'value': target_trade_quote,
+                                'price': price,
+                                'pct': (target_trade_quote / total_value) * 100
+                            }
                     else:
                         logger.warning(f"[!] Insufficient {self.quote_currency} to buy {symbol} (Need ${target_trade_quote:.2f}, Have ${free_quote:.2f})")
                         
