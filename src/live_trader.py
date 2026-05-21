@@ -34,8 +34,10 @@ def run_loop():
         preds = engine.process_and_predict(data)
         
         if not preds.empty:
-            # Add holding column for visualization
+            # Add holding column for visualization, drop timestamp as it's redundant
             preds_display = preds.copy()
+            if 'timestamp' in preds_display.columns:
+                preds_display = preds_display.drop(columns=['timestamp'])
             preds_display['holding'] = preds_display['symbol'].apply(
                 lambda x: '[HOLDING]' if x in holdings else ''
             )
