@@ -26,15 +26,67 @@ def run_loop():
     logger.info(f"Executing run at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}...")
     
     try:
+        # Initialize trader early to get holdings & thresholds for display
+        trader = BinanceTrader(paper_trade=False)
+        total_value, free_quote, holdings, raw_balance = trader.get_portfolio_value()
+        
         data = fetcher.fetch_latest()
         preds = engine.process_and_predict(data)
         
         if not preds.empty:
-            logger.info("\n[Latest Predictions]\n" + preds.to_string())
+            # Add holding column for visualization
+            preds_display = preds.copy()
+            preds_display['holding'] = preds_display['symbol'].apply(
+                lambda x: '[HOLDING]' if x in holdings else ''
+            )
             
-            # Execute trades
-            # Pass paper_trade=False when you are ready to use real money
-            trader = BinanceTrader(paper_trade=False) 
+            # Format dataframe as strings to control output line-by-line
+            lines = preds_display.to_string(index=True).split('\n')
+            header = lines[0]
+            row_lines = [line for line in lines[1:] if line.strip()]
+            
+            entry_threshold = trader.entry_threshold
+            exit_threshold = trader.exit_threshold
+            
+            formatted_output = []
+            formatted_output.append(header)
+            
+            buy_threshold_printed = False
+            exit_threshold_printed = False
+            
+            # Line width for dividers based on the header length
+            width = len(header) + 4
+            
+            for idx, line in enumerate(row_lines):
+                if idx >= len(preds):
+                    break
+                prob = preds.iloc[idx]['rally_prob']
+                
+                # Check for buy threshold transition
+                if not buy_threshold_printed and prob <= entry_threshold:
+                    divider = f"--- BUY ZONE THRESHOLD ({entry_threshold}) ".ljust(width, '-')
+                    formatted_output.append(divider)
+                    buy_threshold_printed = True
+                    
+                # Check for liquidation threshold transition
+                if not exit_threshold_printed and prob <= exit_threshold:
+                    divider = f"--- LIQUIDATION ZONE THRESHOLD ({exit_threshold}) ".ljust(width, '-')
+                    formatted_output.append(divider)
+                    exit_threshold_printed = True
+                    
+                formatted_output.append(line)
+                
+            # If thresholds were not crossed during predictions list (e.g. all higher or lower)
+            if not buy_threshold_printed:
+                divider = f"--- BUY ZONE THRESHOLD ({entry_threshold}) ".ljust(width, '-')
+                formatted_output.append(divider)
+            if not exit_threshold_printed:
+                divider = f"--- LIQUIDATION ZONE THRESHOLD ({exit_threshold}) ".ljust(width, '-')
+                formatted_output.append(divider)
+                
+            logger.info("\n[Latest Predictions]\n" + "\n".join(formatted_output))
+            
+            # Execute trades using pre-initialized trader
             trader.execute_trades(preds, fetcher.get_approved_assets())
         else:
             logger.info("No predictions generated.")
